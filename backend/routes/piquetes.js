@@ -1,7 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { Op } = require('sequelize'); // ← IMPORTANTE
-const { sequelize, Piquete, Anomalia, ItemCatalogo, PodaDetalle } = require('../models');
+const { sequelize, Piquete, Anomalia, ItemCatalogo, PodaDetalle, Observaciones } = require('../models');
+
+router.get('/__catalogo', async (_req, res) => {
+  const { ItemCatalogo } = require('../models');
+  const items = await ItemCatalogo.findAll({ order: [['id', 'ASC']] });
+  res.json(items);
+});
 
 //Borrar un piquete
 router.delete('/:id', async (req, res) => {
@@ -13,7 +19,7 @@ router.delete('/:id', async (req, res) => {
     if (!p) { await t.rollback(); return res.status(404).json({ error: 'Piquete no existe' }); }
 
     // Anomalías del piquete
-    const anoms = await Anomalia.findAll({ where: { piquete_id: p.id }, attributes:['id'], transaction:t });
+    const anoms = await Anomalia.findAll({ where: { piquete_id: p.id }, attributes: ['id'], transaction: t });
     const anomIds = anoms.map(a => a.id);
 
     // 1) detalle de poda
@@ -23,7 +29,7 @@ router.delete('/:id', async (req, res) => {
     // 2) anomalías
     await Anomalia.destroy({ where: { piquete_id: p.id }, transaction: t });
     // 3) observaciones
-    await Observacion.destroy({ where: { piquete_id: p.id }, transaction: t });
+    await Observaciones.destroy({ where: { piquete_id: p.id }, transaction: t });
     // 4) piquete
     await Piquete.destroy({ where: { id: p.id }, transaction: t });
 
@@ -34,6 +40,7 @@ router.delete('/:id', async (req, res) => {
     res.status(400).json({ error: e.message });
   }
 });
+
 
 
 // Insertar un piquete BIS (antes/después de orden X)
@@ -213,17 +220,21 @@ router.post('/:id/sin-novedad', async (req, res) => {
 // GET /piquetes/:id -> detalle con anomalías + catálogo + poda + observaciones
 router.get('/:id', async (req, res) => {
   try {
-    const { Piquete, Anomalia, ItemCatalogo, PodaDetalle, Observaciones} = require('../models');
+    const { Piquete, Anomalia, ItemCatalogo, PodaDetalle, Observaciones } = require('../models');
     const p = await Piquete.findByPk(req.params.id, {
       include: [
         {
           model: Anomalia,
+          as: 'Anomalias',
           include: [
             { model: ItemCatalogo, attributes: ['codigo', 'descripcion', 'tipo_entrada', 'max_value'] },
-            { model: PodaDetalle }
+            { model: PodaDetalle, as: 'PodaDetalle' }
           ]
         },
-        { model: Observaciones, order: [['createdAt', 'DESC']] }
+        { model: Observaciones, as: 'Observaciones' }
+      ],
+      order: [
+        [{ model: Observaciones, as: 'Observaciones' }, 'createdAt', 'DESC']
       ]
     });
     if (!p) return res.status(404).json({ error: 'Piquete no existe' });

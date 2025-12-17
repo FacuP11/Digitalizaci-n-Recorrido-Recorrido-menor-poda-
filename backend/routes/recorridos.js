@@ -3,16 +3,16 @@ const express = require('express');
 const router = express.Router();
 const { sequelize, Recorrido, Piquete, Anomalia, PodaDetalle } = require('../models');
 /* RUTAS FIJAS PRIMERO*/
-router.get('/__ping', (_req, res) => res.json({ ok:true, scope:'recorridos' })); // Ping para chequear montaje
+router.get('/__ping', (_req, res) => res.json({ ok: true, scope: 'recorridos' })); // Ping para chequear montaje
 router.get('/', async (req, res) => {  // GET: lista de recorridos
   try {
     const { Recorrido } = require('../models');
     const lista = await Recorrido.findAll({
-      order: [['createdAt','DESC']],
-      attributes: ['id','linea','kv','entre_desde','entre_hasta','ot_numero','carga_amp','estado','createdAt']
+      order: [['createdAt', 'DESC']],
+      attributes: ['id', 'linea', 'kv', 'entre_desde', 'entre_hasta', 'ot_numero', 'carga_amp', 'estado', 'createdAt']
     });
     res.json(lista);
-  } catch (e) { res.status(400).json({ error:e.message }); }
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 
@@ -64,32 +64,63 @@ router.get('/:id', async (req, res) => {
 // GET /recorridos/:id/piquetes/detalle
 router.get('/:id/piquetes/detalle', async (req, res) => {
   try {
-    const { Recorrido, Piquete, Anomalia, ItemCatalogo, PodaDetalle } = require('../models');
-    const rec = await Recorrido.findByPk(req.params.id);
+    const { Recorrido, Piquete, Anomalia, ItemCatalogo, PodaDetalle, Observaciones } = require('../models');
+
+    const rid = Number(req.params.id);
+    if (!Number.isInteger(rid)) {
+      return res.status(400).json({ error: 'recorrido_id inválido' });
+    }
+
+    const rec = await Recorrido.findByPk(rid);
     if (!rec) return res.status(404).json({ error: 'Recorrido no existe' });
 
     const piquetes = await Piquete.findAll({
-      where: { recorrido_id: rec.id },
-      order: [['orden','ASC']],
-      include: [{
-        model: Anomalia,
-        include: [
-          { model: ItemCatalogo, attributes: ['codigo','descripcion','tipo_entrada','max_value'] },
-          { model: PodaDetalle }
-        ]
-      }]
+      where: { recorrido_id: rid },
+      include: [
+        {
+          model: Anomalia,
+          as: 'Anomalias',  // ← alias de la asociación Piquete.hasMany(Anomalia, { as:'Anomalias' })
+          include: [
+            { model: ItemCatalogo, attributes: ['codigo', 'descripcion', 'tipo_entrada', 'max_value'] },
+            { model: PodaDetalle, as: 'PodaDetalle' } // ← alias de Anomalia.hasOne(PodaDetalle, { as:'PodaDetalle' })
+          ]
+        },
+        { model: Observaciones, as: 'Observaciones' } // ← alias de Piquete.hasMany(Observaciones, { as:'Observaciones' })
+      ]
     });
 
-    // Derivados: tc_set y anomalias_count
+    // Orden robusto: POR, ANT, luego numéricos, luego sufijos (p.ej. 155B)
+    const rank = (etq) => {
+      if (etq === 'POR') return { grp: 0, n: 0, suf: '' };
+      if (etq === 'ANT') return { grp: 1, n: 0, suf: '' };
+      const m = String(etq).match(/^(\d+)([A-Za-z]*)$/);
+      if (m) return { grp: 2, n: Number(m[1]), suf: m[2] || '' };
+      return { grp: 3, n: Number.MAX_SAFE_INTEGER, suf: String(etq) };
+    };
+    piquetes.sort((a, b) => {
+      const A = rank(a.etiqueta), B = rank(b.etiqueta);
+      if (A.grp !== B.grp) return A.grp - B.grp;
+      if (A.n !== B.n) return A.n - B.n;
+      return A.suf.localeCompare(B.suf);
+    });
+
+    // Derivados para el front (tc_set y anomalias_count)
     const out = piquetes.map(p => {
       const plain = p.toJSON();
       plain.tc_set = !!(plain.tc_ss || plain.tc_sd || plain.tc_sv || plain.tc_scm || plain.tc_rs || plain.tc_rd);
-      plain.anomalias_count = Array.isArray(plain.Anomalia) ? plain.Anomalia.length : 0;
+      plain.anomalias_count = Array.isArray(plain.Anomalias) ? plain.Anomalias.length : 0; // ← alias plural
+      // opcional: ordenar observaciones por fecha (desc) si querés devolverlas ya ordenadas
+      if (Array.isArray(plain.Observaciones)) {
+        plain.Observaciones.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      }
       return plain;
     });
 
-    res.json(out);
-  } catch (e) { res.status(400).json({ error: e.message }); }
+    return res.json(out);
+  } catch (e) {
+    console.error('detalle error:', e);
+    return res.status(400).json({ error: e.message });
+  }
 });
 
 
@@ -105,10 +136,10 @@ router.get('/:id/piquetes', async (req, res) => {
     const lista = await Piquete.findAll({
       where: { recorrido_id: rec.id },
       order: [['orden', 'ASC']],
-      attributes: ['id','recorrido_id','etiqueta','orden','sin_novedad']
+      attributes: ['id', 'recorrido_id', 'etiqueta', 'orden', 'sin_novedad']
     });
 
-     // Devolver 200 aunque no haya piquetes
+    // Devolver 200 aunque no haya piquetes
     return res.json(lista);
   } catch (e) {
     return res.status(400).json({ error: e.message });
@@ -175,7 +206,7 @@ router.post('/:id/piquetes/generar', async (req, res) => {
     }
 
     await Piquete.bulkCreate(piquetes);
-    const lista = await Piquete.findAll({ where: { recorrido_id: id }, order: [['orden','ASC']] });
+    const lista = await Piquete.findAll({ where: { recorrido_id: id }, order: [['orden', 'ASC']] });
     res.json(lista);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });

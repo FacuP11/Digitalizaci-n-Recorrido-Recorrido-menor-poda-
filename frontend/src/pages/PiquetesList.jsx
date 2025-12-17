@@ -3,39 +3,65 @@ import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom"
 import { api } from "../lib/api.js";
 
 export default function PiquetesList() {
-  const { id } = useParams(); // id de recorrido
+  const { id } = useParams(); // id del recorrido actual
   const nav = useNavigate();
   const [sp, setSp] = useSearchParams();
+
+  const order = sp.get("order") === "desc" ? "desc" : "asc"; // por defecto asc
   const [rec, setRec] = useState(null);
   const [piquetes, setPiquetes] = useState([]);
-  const [cant, setCant] = useState(0);
   const [err, setErr] = useState("");
+
+  // Filtros
   const [filter, setFilter] = useState("ALL"); // ALL | NOV | SN
-  const order = sp.get("order") === "desc" ? "desc" : "asc"; // ascendente por defecto
 
+  // Selector de recorrido simultáneo (partner)
+  const [todosRecorridos, setTodosRecorridos] = useState([]);
+  const [partnerId, setPartnerId] = useState(() => {
+    const k = `partner_for_${id}`;
+    return localStorage.getItem(k) || "";
+  });
 
-   useEffect(() => {
+  // (opcional) Generar rápido
+  const [cant, setCant] = useState(0);
+
+  // Cargar encabezado + lista detalle + todos los recorridos para el selector
+  useEffect(() => {
     (async () => {
       try {
         setErr("");
-        const r = await api(`/recorridos/${id}`);
+        const [r, list, recs] = await Promise.all([
+          api(`/recorridos/${id}`),
+          api(`/recorridos/${id}/piquetes/detalle`), // incluye Anomalias, Observaciones
+          api(`/recorridos`),
+        ]);
         setRec(r);
-        const list = await api(`/recorridos/${id}/piquetes/detalle`);
         setPiquetes(list);
+        setTodosRecorridos(recs);
+
+        // Inicializar/validar partner guardado
+        const k = `partner_for_${id}`;
+        const saved = localStorage.getItem(k);
+        if (saved && saved !== String(id) && recs.some(x => String(x.id) === saved)) {
+          setPartnerId(saved);
+        } else {
+          setPartnerId("");
+          localStorage.removeItem(k);
+        }
       } catch (e) { setErr(e.message); }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-  
+
   async function cargar() {
     try {
       setErr("");
-      // Usamos el endpoint "detalle" para traer tc_set y anomalías
       const list = await api(`/recorridos/${id}/piquetes/detalle`);
       setPiquetes(list);
     } catch (e) { setErr(e.message); }
   }
-  useEffect(() => { cargar(); }, [id]);
 
+  // Generar piquetes rápido (si lo volvés a habilitar)
   async function generar() {
     try {
       await api(`/recorridos/${id}/piquetes/generar`, {
@@ -47,7 +73,7 @@ export default function PiquetesList() {
     } catch (e) { setErr(e.message); }
   }
 
-  async function insertarBis(refId, posicion="DESPUES") {
+  async function insertarBis(refId, posicion = "DESPUES") {
     try {
       await api(`/piquetes/${refId}/insertar`, { method: "POST", body: { posicion } });
       cargar();
@@ -61,18 +87,17 @@ export default function PiquetesList() {
     } catch (e) { setErr(e.message); }
   }
 
-  // Orden POR -> ANT -> número (incluye '155B' detrás de 155)
+  // Orden POR -> ANT -> número (155 antes que 155B)
   function etiquetaRank(etq) {
     if (etq === "POR") return { grp: 0, n: 0, suf: "" };
     if (etq === "ANT") return { grp: 1, n: 0, suf: "" };
-    // num o num+letra
     const m = String(etq).match(/^(\d+)([A-Za-z]*)$/);
     if (m) return { grp: 2, n: Number(m[1]), suf: m[2] || "" };
     return { grp: 3, n: Number.MAX_SAFE_INTEGER, suf: String(etq) };
   }
 
-   const ordenados = useMemo(() => {
-    const base = [...piquetes].sort((a,b) => {
+  const ordenados = useMemo(() => {
+    const base = [...piquetes].sort((a, b) => {
       const A = etiquetaRank(a.etiqueta), B = etiquetaRank(b.etiqueta);
       if (A.grp !== B.grp) return A.grp - B.grp;
       if (A.n !== B.n) return A.n - B.n;
@@ -106,33 +131,41 @@ export default function PiquetesList() {
     if (!tipos.length) return "—";
     const lado = p.tc_lado ? ` • ${p.tc_lado}` : "";
     const cad = p.tc_cadenas ? ` • ${p.tc_cadenas}` : "";
-    return `${tipos.join("/")}${lado}${cad}`;
+    return `${tipos.join("/")} ${lado}${cad}`;
   }
 
   function resumenAnomalias(p) {
-    if (p.sin_novedad) return <span className="px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-700">SIN NOVEDAD</span>;
-    if (!p.Anomalia || p.Anomalia.length === 0) return <span className="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800">FALTA completar</span>;
-    // Compactar: mostrar hasta 2, luego "+n"
+    if (p.sin_novedad) {
+      return <span className="px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-700">SIN NOVEDAD</span>;
+    }
+
+    // OJO: el endpoint /detalle devuelve con alias 'Anomalias'
+    const anoms = p.Anomalias || p.Anomalia || [];
+    if (!anoms.length) {
+      return <span className="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800">FALTA completar</span>;
+    }
+
     const max = 2;
-    const parts = p.Anomalia.slice(0, max).map(a => {
-      const desc = a.ItemCatalogo?.descripcion || a.item_id;
+    const parts = anoms.slice(0, max).map(a => {
+      const desc = a.ItemCatalogo?.descripcion || a.ItemCatalogo?.codigo || a.item_id;
       if (a.ItemCatalogo?.codigo === "PODA" && a.PodaDetalle) {
         return `PODA ${a.PodaDetalle.urgencia}/${a.PodaDetalle.medio} (${a.PodaDetalle.cantidad_arboles})`;
-        }
+      }
       if (a.ItemCatalogo?.codigo === "BALIZOR" && a.valor_texto) {
         return `BALIZOR ${a.valor_texto}`;
       }
       if (a.valor_numero != null) return `${desc}: ${a.valor_numero}`;
-      if (a.marcado) return `${desc}: X`;
       if (a.valor_texto) return `${desc}: ${a.valor_texto}`;
+      if (a.marcado) return `${desc}: X`;
       return desc;
     });
-    const resto = p.Anomalia.length - max;
+
+    const resto = anoms.length - max;
     const txt = resto > 0 ? `${parts.join(" • ")} • +${resto}` : parts.join(" • ");
-    return <span className="text-xs text-gray-700">{txt}</span>;
+    return <span className="text-xs bg-red-100 px-2 py-0.5 rounded text-gray-700">{txt}</span>;
   }
 
-  //Borrar Piquete
+  // Borrar piquete
   async function borrarPiquete(pid) {
     const ok = window.confirm("¿Eliminar este piquete y sus marcas? Esta acción no se puede deshacer.");
     if (!ok) return;
@@ -142,20 +175,56 @@ export default function PiquetesList() {
     } catch (e) { setErr(e.message); }
   }
 
+  // Selector de partner: guardar en localStorage
+  function onPartnerChange(e) {
+    const v = e.target.value; // "" o id numérico
+    setPartnerId(v);
+    localStorage.setItem(`partner_for_${id}`, v);
+  }
+
+  function toggleOrder() {
+    const next = order === "desc" ? "asc" : "desc";
+    sp.set("order", next);
+    setSp(sp, { replace: true });
+  }
 
   return (
     <div className="max-w-md mx-auto p-4 space-y-4">
-      {/* Volver + Finalizar */}
+      {/* Volver + Finalizar + Header */}
       <div className="flex items-center justify-between">
-        <button onClick={()=>nav('/')} className="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300">← Volver</button>
-        <h1 className="text-xl font-semibold">Linea {/*ACA TIENE QUE IR EL NRO DE LINEA */}</h1>
-        <button onClick={finalizar} className="px-3 py-2 rounded bg-emerald-600 text-black">Finalizar</button>
+        <button onClick={() => nav('/')} className="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300">← Volver</button>
+        <h1 className="text-xl font-semibold">
+          Línea {rec?.linea || "—"} {rec ? `— ${rec.entre_desde} → ${rec.entre_hasta}` : ""}
+        </h1>
+        <button onClick={finalizar} className="px-3 py-2 rounded bg-emerald-600 text-white">Finalizar</button>
       </div>
 
       {err && <p className="text-sm text-red-600">{err}</p>}
 
-      {/* Generar piquetes rápidos */}
-    {/*   <div className="flex gap-2 items-center">
+      {/* Selector de recorrido simultáneo + Orden */}
+      <div className="border rounded p-3 space-y-2">
+        <div className="font-medium">Recorrido simultáneo (opcional)</div>
+        <select className="border p-2 rounded w-full" value={partnerId} onChange={onPartnerChange}>
+          <option value="">— Ninguno —</option>
+          {todosRecorridos
+            .filter(r => String(r.id) !== String(id)) // evitar el mismo
+            .map(r => (
+              <option key={r.id} value={r.id}>
+                #{r.id} — Línea {r.linea} — Entre {r.entre_desde} y {r.entre_hasta}
+              </option>
+            ))}
+        </select>
+
+        <div className="flex items-center gap-3">
+          <span className="text-sm">Orden actual: <b>{order.toUpperCase()}</b></span>
+          <button className="px-2 py-1 rounded bg-gray-200" onClick={toggleOrder}>
+            Cambiar a {order === "desc" ? "ASC" : "DESC"}
+          </button>
+        </div>
+      </div>
+
+      {/* (Opcional) Panel para generar piquetes
+      <div className="flex gap-2 items-center">
         <input className="border p-2 rounded w-24" type="number" min="0" placeholder="Cant."
                value={cant} onChange={e=>setCant(e.target.value)} />
         <button onClick={generar} className="px-3 py-2 rounded bg-blue-600 text-white">Generar</button>
@@ -163,16 +232,16 @@ export default function PiquetesList() {
 
       {/* Filtros */}
       <div className="flex gap-2">
-        <button onClick={()=>setFilter("ALL")}
-                className={`px-3 py-1 rounded ${filter==="ALL" ? "bg-gray-900 text-black" : "bg-gray-200"}`}>
+        <button onClick={() => setFilter("ALL")}
+          className={`px-3 py-1 rounded ${filter === "ALL" ? "bg-gray-900 text-white" : "bg-gray-200"}`}>
           Todos
         </button>
-        <button onClick={()=>setFilter("NOV")}
-                className={`px-3 py-1 rounded ${filter==="NOV" ? "bg-gray-900 text-white" : "bg-gray-200"}`}>
+        <button onClick={() => setFilter("NOV")}
+          className={`px-3 py-1 rounded ${filter === "NOV" ? "bg-gray-900 text-white" : "bg-gray-200"}`}>
           Con novedad
         </button>
-        <button onClick={()=>setFilter("SN")}
-                className={`px-3 py-1 rounded ${filter==="SN" ? "bg-gray-900 text-white" : "bg-gray-200"}`}>
+        <button onClick={() => setFilter("SN")}
+          className={`px-3 py-1 rounded ${filter === "SN" ? "bg-gray-900 text-white" : "bg-gray-200"}`}>
           Sin novedad
         </button>
       </div>
@@ -194,14 +263,24 @@ export default function PiquetesList() {
                   {resumenAnomalias(p)}
                 </div>
               </div>
+
               <div className="flex items-center gap-2">
                 {/* BIS */}
                 <div className="flex flex-col items-end gap-1">
-                  <button className="text-blue-700 underline text-xs" onClick={()=>insertarBis(p.id, "ANTES")}>+BIS antes</button>
-                  <button className="text-blue-700 underline text-xs" onClick={()=>insertarBis(p.id, "DESPUES")}>+BIS desp.</button>
+                  <button className="text-blue-700 underline text-xs" onClick={() => insertarBis(p.id, "ANTES")}>+BIS antes</button>
+                  <button className="text-blue-700 underline text-xs" onClick={() => insertarBis(p.id, "DESPUES")}>+BIS desp.</button>
                 </div>
-                {/* Abrir */}
-                <Link className="px-2 py-1 rounded bg-blue-600 text-white" to={`/piquetes/${p.id}`}>Abrir</Link>
+
+                {/* Abrir (pasa order + partner si está seleccionado) */}
+                <Link
+                  className="px-2 py-1 rounded bg-blue-600 text-white"
+                  to={`/piquetes/${p.id}?order=${order}${partnerId ? `&partner=${partnerId}` : ""}`}
+                >
+                  Abrir
+                </Link>
+
+                {/* Borrar */}
+                <button className="px-2 py-1 rounded bg-red-600 text-white" onClick={() => borrarPiquete(p.id)}>Borrar</button>
               </div>
             </div>
           </li>
