@@ -1,5 +1,5 @@
 
-const BASE = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const BASE = "https://recorridos-api-backend.onrender.com"; //import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 /**
  * Llamada genérica a la API.
