@@ -201,13 +201,17 @@ async function finalizar() {
         };
 
         // --- 5. ENVIAR ---
-        await api(`/recorridos/${id}/finalizar`, { 
+        const respuesta = await api(`/recorridos/${id}/finalizar`, { 
             method: "POST",
             body: reporteFinal 
         });
-
         alert("Recorrido enviado exitosamente.");
-        nav('/'); 
+        if (respuesta && respuesta.archivo) {
+            const URL_BACKEND = "https://recorridos-api-backend.onrender.com"; 
+            window.open(`${URL_BACKEND}/api/recorridos/descargar/${respuesta.archivo}`, "_blank");
+        }
+
+        nav('/');
 
     } catch (e) { 
         setErr(e.message); 

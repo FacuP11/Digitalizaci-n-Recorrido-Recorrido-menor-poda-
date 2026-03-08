@@ -3,6 +3,8 @@ const express = require('express');
 const router = express.Router();
 const { sequelize, Recorrido, Piquete, Anomalia, PodaDetalle } = require('../models');
 const { generarReporteExcel } = require('../generarExcel');
+const path = require('path');
+const fs = require('fs');
 
 /* RUTAS FIJAS PRIMERO*/
 router.get('/__ping', (_req, res) => res.json({ ok: true, scope: 'recorridos' })); // Ping para chequear montaje
@@ -159,16 +161,21 @@ router.post('/:id/finalizar', async (req, res) => {
 
     // 2. Generar el Excel
     console.log("📊 Iniciando generación de Excel...");
+    let nombreArchivoGenerado = null;
     try {
         // Pasamos los datos que vinieron del frontend al generador
-        const nombreArchivo = await generarReporteExcel(datosReporte);
-        console.log(`✅ Excel creado: ${nombreArchivo}`);
+        nombreArchivoGenerado = await generarReporteExcel(datosReporte);
+        console.log(`✅ Excel creado: ${nombreArchivoGenerado}`);
     } catch (excelError) {
         console.error("❌ Error generando Excel (pero se guardó en DB):", excelError.message);
-        // No fallamos la request completa si falla el excel, pero lo avisamos en consola
+        
     }
 
-    res.json({ ok: true, recorrido: r });
+    res.json({ 
+        ok: true, 
+        recorrido: r, 
+        archivo: nombreArchivoGenerado 
+    });
 
   } catch (e) {
     console.error("❌ Error general:", e);
@@ -287,4 +294,22 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Descargar archivo Excel
+router.get('/descargar/:nombreArchivo', (req, res) => {
+    const { nombreArchivo } = req.params;
+    
+    // Buscamos el archivo en la raíz del backend
+    const filePath = path.join(__dirname, '../', nombreArchivo);
+
+    if (fs.existsSync(filePath)) {
+        // res.download le dice al navegador "Descarga este archivo, no intentes leerlo"
+        res.download(filePath, nombreArchivo, (err) => {
+            if (err) console.error("Error al descargar:", err);
+            // Opcional: Borrar el archivo del servidor después de descargarlo para no ocupar espacio
+            // fs.unlinkSync(filePath); 
+        });
+    } else {
+        res.status(404).json({ error: "El archivo ya no existe o caducó." });
+    }
+});
 module.exports = router;
