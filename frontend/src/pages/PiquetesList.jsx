@@ -205,10 +205,34 @@ async function finalizar() {
             method: "POST",
             body: reporteFinal 
         });
+
+        // Vemos en consola qué nos devolvió exactamente el backend
+        console.log("Respuesta del servidor:", respuesta);
+
         alert("Recorrido enviado exitosamente.");
+
+        // --- 5. MAGIA DE DESCARGA (ANTI-BLOQUEOS) ---
+        // Chequeamos si la respuesta tiene el nombre del archivo
         if (respuesta && respuesta.archivo) {
+            
+            // ⚠️ REEMPLAZA ESTO POR LA URL REAL DE TU RENDER
             const URL_BACKEND = "https://recorridos-api-backend.onrender.com"; 
-            window.open(`${URL_BACKEND}/api/recorridos/descargar/${respuesta.archivo}`, "_blank");
+            
+            // Armamos la URL exacta. Si tu API no usa "/api", quítalo. 
+            const linkDescarga = `${URL_BACKEND}/recorridos/descargar/${respuesta.archivo}`;
+            console.log("Intentando descargar de:", linkDescarga);
+
+            // Truco: Creamos un botón invisible, lo agregamos a la página, lo "clickeamos" y lo borramos
+            const enlaceInvisible = document.createElement('a');
+            enlaceInvisible.href = linkDescarga;
+            enlaceInvisible.target = "_blank"; // Para que no te saque de la app
+            enlaceInvisible.download = respuesta.archivo;
+            
+            document.body.appendChild(enlaceInvisible);
+            enlaceInvisible.click();
+            document.body.removeChild(enlaceInvisible);
+        } else {
+            console.log("El servidor no devolvió un nombre de archivo. No hay descarga.");
         }
 
         nav('/');
