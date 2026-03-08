@@ -183,34 +183,54 @@ router.post('/:id/finalizar', async (req, res) => {
   }
 });
 
-// Agregar un piquete al final del recorrido 
+// Agregar un piquete inteligente
 router.post('/:id/piquetes/final', async (req, res) => {
     try {
         const { id } = req.params;
-        const { Piquete } = require('../models'); 
+        const { Piquete } = require('../models');
 
-        // 1. Buscamos el último piquete de este recorrido para saber qué número sigue
-        const ultimoPiquete = await Piquete.findOne({
+        // 1. Traemos todos los piquetes ordenados
+        const piquetes = await Piquete.findAll({
             where: { recorrido_id: id },
-            order: [['orden', 'DESC']]
+            order: [['orden', 'ASC']]
         });
 
-        let nuevoOrden = 1000; // Por defecto
-        let nuevaEtiqueta = "1";
+        // 2. Filtramos solo los que son puramente números
+        const numerados = piquetes.filter(p => !isNaN(parseInt(p.etiqueta)) && !p.etiqueta.includes('BIS'));
 
-        if (ultimoPiquete) {
-            nuevoOrden = ultimoPiquete.orden + 1000; // Le sumamos 1000 al orden para mantener el espaciado
+        let nuevaEtiqueta = "NUEVO";
+        let nuevoOrden = 1000;
+
+        if (numerados.length > 0) {
+            // Buscamos cuál fue el último número real
+            const ultimoNumerado = numerados[numerados.length - 1];
+            const indiceOriginal = piquetes.findIndex(p => p.id === ultimoNumerado.id);
             
-            // Intentamos extraer el número de la última etiqueta (ej: si es "45", sacamos 45)
-            const numeroEtiqueta = parseInt(ultimoPiquete.etiqueta.replace(/\D/g, ''));
-            if (!isNaN(numeroEtiqueta)) {
-                nuevaEtiqueta = (numeroEtiqueta + 1).toString();
-            } else {
-                nuevaEtiqueta = "NUEVO"; // Por si el último era algo raro como "POR"
+            // 3. ¿La línea va en subida (54->55) o en bajada (75->74)?
+            let paso = 1; // Por defecto sube
+            if (numerados.length >= 2) {
+                const penultimo = parseInt(numerados[numerados.length - 2].etiqueta);
+                const ultimo = parseInt(ultimoNumerado.etiqueta);
+                if (ultimo < penultimo) paso = -1; // Va en bajada
             }
+            
+            // Asignamos el número que sigue matemáticamente
+            nuevaEtiqueta = (parseInt(ultimoNumerado.etiqueta) + paso).toString();
+
+            // 4. Calculamos su posición física (orden)
+            if (indiceOriginal === piquetes.length - 1) {
+                // No hay nada después (no hay POR final). Lo ponemos al final.
+                nuevoOrden = ultimoNumerado.orden + 1000;
+            } else {
+                // Hay algo después (ej: un POR final o ANT). Lo metemos justo en el medio.
+                const siguiente = piquetes[indiceOriginal + 1];
+                nuevoOrden = (ultimoNumerado.orden + siguiente.orden) / 2;
+            }
+        } else if (piquetes.length > 0) {
+             // Fallback por si no hay números en toda la línea
+             nuevoOrden = piquetes[piquetes.length - 1].orden + 1000;
         }
 
-        // 2. Creamos el nuevo piquete
         const nuevo = await Piquete.create({
             recorrido_id: id,
             etiqueta: nuevaEtiqueta,
@@ -219,61 +239,88 @@ router.post('/:id/piquetes/final', async (req, res) => {
 
         res.json(nuevo);
     } catch (error) {
-        console.error("Error agregando piquete al final:", error);
         res.status(500).json({ error: error.message });
     }
 });
-// **************** rutas (POST crear, generar piquetes, finalizar, etc.)...********************************
 
+// GENERAR PIQUETES (Soporta subida, bajada, POR y ANT)
+// =======================================================
 router.post('/:id/piquetes/generar', async (req, res) => {
   try {
     const { id } = req.params;
-    const { cantidad = 0, por = {}, ant = {} } = req.body;
+    
+    // Leemos los datos tal cual los manda el nuevo formulario del frontend
+    const { 
+        piq_desde, 
+        piq_hasta, 
+        por_inicio, 
+        por_final, 
+        ant_inicio, 
+        ant_final 
+    } = req.body;
+
+    const { Recorrido, Piquete } = require('../models');
 
     const rec = await Recorrido.findByPk(id);
     if (!rec) return res.status(404).json({ error: 'Recorrido no existe' });
 
-    const n = Number(cantidad) || 0;
-    if (n < 0) return res.status(400).json({ error: 'cantidad inválida' });
-
+    // Evitar duplicados
     const yaHay = await Piquete.count({ where: { recorrido_id: id } });
     if (yaHay > 0) return res.status(400).json({ error: 'Este recorrido ya tiene piquetes generados' });
 
     const piquetes = [];
-    let orden = 1;
+    let ordenBase = 10; // Usamos saltos de 10 para poder insertar "BIS" después
 
-     // POR al INICIO (boolean)
-    if (por.inicio) {
-      piquetes.push({ recorrido_id: id, etiqueta: 'POR', orden: orden++ });
+    // 1. ANT al INICIO
+    const cantAntInicio = Math.max(0, parseInt(ant_inicio) || 0);
+    for (let i = 0; i < cantAntInicio; i++) {
+      piquetes.push({ recorrido_id: id, etiqueta: 'ANT', orden: ordenBase });
+      ordenBase += 10;
     }
 
-    // ANT al INICIO (uno o más)
-    const antIni = Math.max(0, Number(ant.inicio || 0));
-    for (let i = 0; i < antIni; i++) {
-      piquetes.push({ recorrido_id: id, etiqueta: `ANT-${i + 1}`, orden: orden++ });
+    // 2. POR al INICIO
+    if (por_inicio === true || por_inicio === 'true') {
+      piquetes.push({ recorrido_id: id, etiqueta: 'POR', orden: ordenBase });
+      ordenBase += 10;
     }
 
-   
-    // Piquetes numerados
-    for (let i = 1; i <= n; i++) {
-      piquetes.push({ recorrido_id: id, etiqueta: String(i), orden: orden++ });
+    // 3. PIQUETES NUMERADOS (Detecta subida o bajada)
+    const inicio = parseInt(piq_desde);
+    const fin = parseInt(piq_hasta);
+
+    if (!isNaN(inicio) && !isNaN(fin)) {
+        const paso = (inicio <= fin) ? 1 : -1;
+        // Bucle inteligente: si paso es 1, suma hasta 'fin'. Si es -1, resta hasta 'fin'.
+        for (let i = inicio; (paso > 0 ? i <= fin : i >= fin); i += paso) {
+            piquetes.push({ recorrido_id: id, etiqueta: i.toString(), orden: ordenBase });
+            ordenBase += 10;
+        }
     }
 
-    // POR al FINAL (boolean)
-    if (por.final) {
-      piquetes.push({ recorrido_id: id, etiqueta: 'POR', orden: orden++ });
+    // 4. POR al FINAL
+    if (por_final === true || por_final === 'true') {
+      piquetes.push({ recorrido_id: id, etiqueta: 'POR', orden: ordenBase });
+      ordenBase += 10;
     }
 
-    // ANT al FINAL (uno o más)
-    const antFin = Math.max(0, Number(ant.final || 0));
-    for (let i = 0; i < antFin; i++) {
-      piquetes.push({ recorrido_id: id, etiqueta: 'ANT', orden: orden++ });
+    // 5. ANT al FINAL
+    const cantAntFinal = Math.max(0, parseInt(ant_final) || 0);
+    for (let i = 0; i < cantAntFinal; i++) {
+      piquetes.push({ recorrido_id: id, etiqueta: 'ANT', orden: ordenBase });
+      ordenBase += 10;
     }
 
+    // 6. Guardamos todos en la base de datos de un solo impacto (muy rápido)
     await Piquete.bulkCreate(piquetes);
+
+    // Devolvemos la lista generada
     const lista = await Piquete.findAll({ where: { recorrido_id: id }, order: [['orden', 'ASC']] });
     res.json(lista);
-  } catch (e) { res.status(400).json({ error: e.message }); }
+
+  } catch (e) { 
+    console.error("❌ Error generando piquetes:", e);
+    res.status(400).json({ error: e.message }); 
+  }
 });
 
 
@@ -289,13 +336,6 @@ router.delete('/:id', async (req, res) => {
       await t.rollback();
       return res.status(404).json({ error: 'Recorrido no existe' });
     }
-
-    // Para bloquear borrado de recorridos finalizados, descomentar:
-    // if (rec.estado === 'FINALIZADO') {
-    //   await t.rollback();
-    //   return res.status(400).json({ error: 'No se puede borrar un recorrido FINALIZADO' });
-    // }
-
     // Piquetes del recorrido
     const piquetes = await Piquete.findAll({
       where: { recorrido_id: id },

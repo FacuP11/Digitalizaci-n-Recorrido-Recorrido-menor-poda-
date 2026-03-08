@@ -1,13 +1,9 @@
 
-const BASE = "https://recorridos-api-backend.onrender.com"; //import.meta.env.VITE_API_URL || "http://localhost:4000";
+const BASE = import.meta.env.DEV 
+    ? "http://localhost:4000" 
+    : "https://recorridos-api-backend.onrender.com";
 
-/**
- * Llamada genérica a la API.
- * - Agrega headers JSON
- * - Soporta body como objeto
- * - Lanza error si status != 2xx
- * - Timeout opcional con AbortController
- */
+
 export async function api(path, { method = "GET", body, timeoutMs = 12000 } = {}) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);

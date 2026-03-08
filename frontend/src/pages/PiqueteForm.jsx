@@ -208,26 +208,39 @@ export default function PiqueteForm() {
   // --- CARGA DE DATOS ---
   async function cargar() {
     try {
+      // 1. LIMPIEZA TOTAL: Vaciamos el piquete y reseteamos la memoria visual
+      setP(null);
       setErr("");
+      setShowNextBtn(false); 
+      setTc({
+        ss: false, sd: false, sv: false,
+        scm: false, rs: false, rd: false,
+        lado: "INICIO", cadenas: "V"
+      }); // <-- Vaciamos la cadena de aisladores al instante
+
+      // 2. BUSCAMOS LOS DATOS NUEVOS
       const data = await api(`/piquetes/${piqueteId}`);
+      
+      // 3. LLENAMOS TODO CON LOS DATOS FRESCOS
       setP(data);
       
       const tieneDatos = (data.Anomalias && data.Anomalias.length > 0) || (data.Observaciones && data.Observaciones.length > 0);
       setShowNextBtn(tieneDatos);
 
-      // Cargar estado de TC
+      // Cargar estado de TC 
       setTc({
         ss: !!data.tc_ss, sd: !!data.tc_sd, sv: !!data.tc_sv,
         scm: !!data.tc_scm, rs: !!data.tc_rs, rd: !!data.tc_rd,
         lado: data.tc_lado || "INICIO", cadenas: data.tc_cadenas || "V",
       });
-
-      // Pre-seleccionar lado por defecto (si no hay uno elegido ya)
       if (data.Recorrido && !aislLado) {
           setAislLado(data.Recorrido.entre_desde);
       }
-    } catch (e) { setErr(e.message); }
-  }
+      
+    } catch (e) { 
+      setErr(e.message); 
+    }
+}
 
   useEffect(() => { cargar(); }, [piqueteId]);
 

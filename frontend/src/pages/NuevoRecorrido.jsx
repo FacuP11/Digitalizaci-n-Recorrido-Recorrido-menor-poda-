@@ -13,7 +13,8 @@ export default function NuevoRecorrido() {
     carga_amp: 0,
     fecha: new Date().toISOString().slice(0, 10),
 
-    cantidad: 0,
+    piq_desde: "", // Antes era cantidad: 0
+    piq_hasta: "",
     // CAMBIO 1: Convertimos la posición de POR a dos booleanos independientes
     por_inicio: false,
     por_final: false,
@@ -37,7 +38,7 @@ export default function NuevoRecorrido() {
       setErr("");
       setSaving(true);
 
-      // 1) crear encabezado
+      // 1) Crear encabezado (Queda igual)
       const rec = await api("/recorridos", {
         method: "POST", 
         body: { 
@@ -51,20 +52,22 @@ export default function NuevoRecorrido() {
         } 
       });
       
-      // 2) generar piquetes (si corresponde)
-      if (Number(form.cantidad) > 0 || form.por_inicio || form.por_final || Number(form.ant_inicio) > 0 || Number(form.ant_final) > 0) {
-        await api(`/recorridos/${rec.id}/piquetes/generar`, {
-          method: "POST",
-          body: {
-            cantidad: Number(form.cantidad || 0),
-            // CAMBIO 2: Usamos los booleanos directos en el cuerpo de la solicitud
-            por: { inicio: !!form.por_inicio, final: !!form.por_final },
-            ant: { inicio: Number(form.ant_inicio || 0), final: Number(form.ant_final || 0) }
-          }
-        });
-      }
+      // 2) Generar piquetes
+      // Quitamos el IF viejo que bloqueaba el paso. 
+      // Si el usuario puso números, el backend los procesa; si no, solo crea el encabezado.
+      await api(`/recorridos/${rec.id}/piquetes/generar`, {
+        method: "POST",
+        body: {
+          piq_desde: form.piq_desde,                 // Envia el "Desde"
+          piq_hasta: form.piq_hasta,                 // Envia el "Hasta"
+          por_inicio: !!form.por_inicio,             // Envia true/false directo
+          por_final: !!form.por_final,               // Envia true/false directo
+          ant_inicio: Number(form.ant_inicio || 0),  // Envia número directo
+          ant_final: Number(form.ant_final || 0)     // Envia número directo
+        }
+      });
 
-      // 3) navegar a la lista de piquetes
+      // 3) Navegar a la lista de piquetes
       nav(`/recorridos/${rec.id}/piquetes`);
     } catch (e) {
       setErr(e.message);
@@ -146,10 +149,44 @@ export default function NuevoRecorrido() {
            <span className="text-xl">⚙️</span> Piquetes del Tramo
         </div>
 
-        {/* 1. Cantidad Normales */}
+        {/* 1. Numeración de Piquetes (DESDE / HASTA - DISEÑO COMPACTO) */}
         <div className="flex flex-col bg-blue-50 p-3 rounded-xl border-2 border-blue-200">
-          <label className="text-xs font-extrabold text-blue-900 uppercase mb-2">Cantidad de Piquetes (1 al N)</label>
-          <input className="border-2 border-blue-400 p-3 rounded-xl bg-white text-blue-900 text-xl font-black focus:border-blue-700 outline-none text-center shadow-inner" type="number" min="0" name="cantidad" placeholder="Ej: 50" value={form.cantidad} onChange={onChange} />
+          <label className="text-xs font-extrabold text-blue-900 uppercase mb-2">Numeración a Recorrer</label>
+          <div className="flex gap-2 items-center justify-between">
+             
+             {/* Desde */}
+             <div className="w-2/5 flex flex-col">
+                 <span className="text-[10px] font-bold text-blue-800 mb-1 ml-1">Desde Nº:</span>
+                 <input 
+                    className="border-2 border-blue-400 p-2 rounded-lg bg-white text-blue-900 text-lg font-black focus:border-blue-700 outline-none text-center shadow-inner transition-all w-full" 
+                    type="number" 
+                    name="piq_desde" 
+                    placeholder="Ej: 75" 
+                    value={form.piq_desde || ""} 
+                    onChange={onChange} 
+                 />
+             </div>
+             
+             {/* Flecha visual */}
+             <div className="font-black text-blue-300 text-xl flex-shrink-0">→</div>
+             
+             {/* Hasta */}
+             <div className="w-2/5 flex flex-col">
+                 <span className="text-[10px] font-bold text-blue-800 mb-1 ml-1">Hasta Nº:</span>
+                 <input 
+                    className="border-2 border-blue-400 p-2 rounded-lg bg-white text-blue-900 text-lg font-black focus:border-blue-700 outline-none text-center shadow-inner transition-all w-full" 
+                    type="number" 
+                    name="piq_hasta" 
+                    placeholder="Ej: 54" 
+                    value={form.piq_hasta || ""} 
+                    onChange={onChange} 
+                 />
+             </div>
+             
+          </div>
+          <div className="text-[9px] text-blue-600 font-bold text-center mt-2 leading-tight">
+            El sistema detectará si el recorrido sube o baja.
+          </div>
         </div>
 
         {/* 2. POR (Botones de Alternancia Táctiles) */}
