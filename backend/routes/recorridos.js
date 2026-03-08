@@ -183,6 +183,46 @@ router.post('/:id/finalizar', async (req, res) => {
   }
 });
 
+// Agregar un piquete al final del recorrido 
+router.post('/:id/piquetes/final', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { Piquete } = require('../models'); 
+
+        // 1. Buscamos el último piquete de este recorrido para saber qué número sigue
+        const ultimoPiquete = await Piquete.findOne({
+            where: { recorrido_id: id },
+            order: [['orden', 'DESC']]
+        });
+
+        let nuevoOrden = 1000; // Por defecto
+        let nuevaEtiqueta = "1";
+
+        if (ultimoPiquete) {
+            nuevoOrden = ultimoPiquete.orden + 1000; // Le sumamos 1000 al orden para mantener el espaciado
+            
+            // Intentamos extraer el número de la última etiqueta (ej: si es "45", sacamos 45)
+            const numeroEtiqueta = parseInt(ultimoPiquete.etiqueta.replace(/\D/g, ''));
+            if (!isNaN(numeroEtiqueta)) {
+                nuevaEtiqueta = (numeroEtiqueta + 1).toString();
+            } else {
+                nuevaEtiqueta = "NUEVO"; // Por si el último era algo raro como "POR"
+            }
+        }
+
+        // 2. Creamos el nuevo piquete
+        const nuevo = await Piquete.create({
+            recorrido_id: id,
+            etiqueta: nuevaEtiqueta,
+            orden: nuevoOrden
+        });
+
+        res.json(nuevo);
+    } catch (error) {
+        console.error("Error agregando piquete al final:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
 // **************** rutas (POST crear, generar piquetes, finalizar, etc.)...********************************
 
 router.post('/:id/piquetes/generar', async (req, res) => {

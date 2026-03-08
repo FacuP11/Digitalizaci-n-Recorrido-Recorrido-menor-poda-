@@ -281,6 +281,16 @@ function determinarPrioridad(anomalia) {
     sp.set("order", next);
     setSp(sp, { replace: true });
   }
+  async function agregarPiqueteAlFinal() {
+    if(!window.confirm("¿Deseas agregar un nuevo piquete numerado al final del recorrido?")) return;
+    try {
+      setErr("");
+      await api(`/recorridos/${id}/piquetes/final`, { method: "POST" });
+      await cargar(); // Recargamos la lista para que aparezca
+    } catch (e) { 
+      setErr(e.message); 
+    }
+  }
 
   function onPartnerChange(e) {
     const v = e.target.value;
@@ -292,23 +302,32 @@ function determinarPrioridad(anomalia) {
   if (!rec) return <div className="p-4">Cargando...</div>;
 
   return (
-    <div className="max-w-md mx-auto p-4 space-y-4 pb-10">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <button onClick={() => nav('/')} className="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300">← Volver</button>
+    <div className="max-w-md mx-auto p-4 space-y-5 pb-24 bg-gray-50 min-h-screen">
+      
+      {/* ========================================================= */}
+      {/* HEADER */}
+      {/* ========================================================= */}
+      <div className="flex items-center justify-between border-b-2 border-gray-300 pb-3">
+        <button onClick={() => nav('/')} className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 font-extrabold text-sm transition-colors shadow-sm">
+           ← Volver
+        </button>
         <div className="text-right">
-            <div className="text-xs text-gray-500 font-bold">LÍNEA</div>
-            <h1 className="text-xl font-bold text-blue-900">{rec.linea}</h1>
+            <div className="text-[10px] text-gray-500 font-extrabold uppercase tracking-widest">Línea</div>
+            <h1 className="text-xl font-black text-blue-900 truncate max-w-[200px]">{rec.linea}</h1>
         </div>
       </div>
       
-      {err && <p className="text-red-600 text-center text-sm font-bold">{err}</p>}
+      {err && <div className="bg-red-100 border-2 border-red-500 text-red-800 p-3 rounded-xl text-center text-sm font-extrabold shadow-sm">{err}</div>}
 
-      {/* Selector Partner + BOTÓN CAMBIO RÁPIDO */}
-      <div className="border rounded p-3 space-y-3 bg-blue-50 border-blue-100">
-        <div className="font-bold text-sm text-blue-800">Línea Asociada</div>
-        <select className="border p-2 rounded w-full text-sm bg-white" value={partnerId} onChange={onPartnerChange}>
-          <option value="">— Ninguna —</option>
+      {/* ========================================================= */}
+      {/* TARJETA: LÍNEA ASOCIADA */}
+      {/* ========================================================= */}
+      <div className="border-2 border-blue-300 rounded-xl p-4 bg-blue-50 shadow-sm space-y-3">
+        <div className="font-extrabold text-blue-900 text-sm uppercase tracking-wide flex items-center gap-2">
+            <span className="text-lg">🔗</span> Línea Asociada
+        </div>
+        <select className="border-2 border-blue-400 p-3 rounded-lg w-full bg-white text-blue-900 font-bold focus:border-blue-700 outline-none transition-colors" value={partnerId} onChange={onPartnerChange}>
+          <option value="" className="text-gray-500 font-normal">— Ninguna —</option>
           {todosRecorridos
             .filter(r => String(r.id) !== String(id))
             .map(r => (
@@ -321,90 +340,123 @@ function determinarPrioridad(anomalia) {
         {partnerId && (
             <button 
                 onClick={irAlPartner}
-                className="w-full py-3 rounded bg-white border-2 border-blue-600 text-blue-700 font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-50 shadow-sm"
+                className="w-full py-3 rounded-lg bg-blue-700 text-white border-2 border-blue-900 font-extrabold text-sm flex items-center justify-center gap-2 active:scale-95 shadow-sm transition-all uppercase tracking-wide"
             >
-                ⇄ IR A LA LÍNEA ASOCIADA
+                ⇄ Ir a la línea asociada
             </button>
         )}
       </div>
 
-      {/* Filtros y Orden */}
-      <div className="flex justify-between items-center bg-gray-100 p-2 rounded">
-         <div className="flex gap-1">
-            <button onClick={() => setFilter("ALL")} className={`text-xs px-3 py-1 rounded ${filter === "ALL" ? "bg-gray-800 text-white" : "bg-white"}`}>Todos</button>
-            <button onClick={() => setFilter("NOV")} className={`text-xs px-3 py-1 rounded ${filter === "NOV" ? "bg-red-600 text-white" : "bg-white"}`}>Novedad</button>
-         </div>
-         <button onClick={toggleOrder} className="text-xs px-2 py-1 bg-white border rounded">
-            Orden: {order.toUpperCase()}
-         </button>
+      {/* ========================================================= */}
+      {/* BARRA DE FILTROS Y ORDEN (ESTILO INTERRUPTOR) */}
+      {/* ========================================================= */}
+      <div className="flex flex-col gap-2">
+          <div className="flex bg-gray-200 p-1.5 rounded-xl border-2 border-gray-300 shadow-inner items-center justify-between">
+             
+             {/* Filtros */}
+             <div className="flex gap-1 flex-1">
+                <button 
+                    onClick={() => setFilter("ALL")} 
+                    className={`flex-1 py-2 rounded-lg text-xs font-extrabold uppercase transition-all duration-200 ${filter === "ALL" ? "bg-gray-800 text-white shadow-md scale-[1.02]" : "text-gray-600 hover:bg-gray-300"}`}
+                >
+                    Todos
+                </button>
+                <button 
+                    onClick={() => setFilter("NOV")} 
+                    className={`flex-1 py-2 rounded-lg text-xs font-extrabold uppercase transition-all duration-200 ${filter === "NOV" ? "bg-red-600 text-white shadow-md scale-[1.02]" : "text-gray-600 hover:bg-gray-300"}`}
+                >
+                    Novedades
+                </button>
+             </div>
+             
+             <div className="w-px h-8 bg-gray-300 mx-2"></div>
+
+             {/* Orden */}
+             <button 
+                onClick={toggleOrder} 
+                className="px-3 py-2 bg-white border-2 border-gray-300 rounded-lg text-xs font-extrabold text-gray-700 shadow-sm flex items-center gap-1 hover:bg-gray-50 active:scale-95 transition-all"
+             >
+                {order === "asc" ? "⬇ ASC" : "⬆ DESC"}
+             </button>
+          </div>
+
+          {/* BOTÓN AGREGAR PIQUETE */}
+          <button 
+              onClick={agregarPiqueteAlFinal}
+              className="w-full bg-blue-100 hover:bg-blue-200 text-blue-800 border-2 border-blue-400 font-extrabold py-3 rounded-xl shadow-sm text-sm uppercase tracking-wide transition-all active:scale-95 flex justify-center items-center gap-2"
+          >
+              <span className="text-lg leading-none">+</span> Agregar Piquete al Final
+          </button>
       </div>
 
-      {/* --- NUEVO BOTÓN AGREGAR PIQUETE (ALTO CONTRASTE) --- */}
-      <button 
-          onClick={() => nav(`/recorridos/${id}/piquetes/nuevo`)}
-          className="w-full bg-blue-700 hover:bg-blue-800 text-white font-extrabold py-3 rounded-lg shadow-md mb-4 text-sm uppercase tracking-wide transition-colors"
-      >
-          + Agregar Piquete
-      </button>
-
-      {/* Lista Piquetes */}
-      <ul className="divide-y">
+      {/* ========================================================= */}
+      {/* LISTA DE PIQUETES  */}
+      {/* ========================================================= */}
+      <ul className="space-y-3">
         {filtrados.map(p => (
-          <li key={p.id} className="py-3">
-             <div className="flex justify-between items-center gap-2">
-                
-                {/* ZONA IZQUIERDA: Clic para abrir el formulario */}
-                <Link 
-                  to={`/piquetes/${p.id}?order=${order}${partnerId ? `&partner=${partnerId}` : ""}`} 
-                  className="flex-1 block"
-                >
-                    <div className="flex items-center gap-2">
-                        <div className="font-bold text-lg text-gray-900">Piq {p.etiqueta}</div>
-                        {/* Badges de estado */}
-                        {p.sin_novedad && <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">S/N</span>}
-                        {p.anomalias_count > 0 && <span className="text-[10px] bg-red-100 text-red-800 px-1.5 py-0.5 rounded font-bold">{p.anomalias_count} NOV</span>}
+          <li key={p.id} className="bg-white border-2 border-gray-300 rounded-xl shadow-sm flex overflow-hidden">
+             
+             {/* ZONA IZQUIERDA: Clickeable para abrir el piquete */}
+             <Link 
+                to={`/piquetes/${p.id}?order=${order}${partnerId ? `&partner=${partnerId}` : ""}`} 
+                className="flex-1 p-3 flex flex-col justify-center active:bg-blue-50 transition-colors"
+             >
+                <div className="flex items-center gap-3 mb-1">
+                    <div className="font-black text-2xl text-gray-900 leading-none">
+                        P.{p.etiqueta}
                     </div>
-                    {/* Detalles extra simples */}
-                    {(p.tc_set) && <div className="text-xs text-gray-500">Cadena ok</div>}
-                </Link>
-
-                {/* ZONA DERECHA: Botones BIS y Borrar */}
-                <div className="flex flex-col items-end gap-1">
-                   {/* Botones BIS pequeños */}
-                   <div className="flex gap-1">
-                      <button 
-                        onClick={() => insertarBis(p.id, "ANTES")}
-                        className="text-[10px] bg-gray-200 hover:bg-gray-300 text-gray-700 px-2 py-1 rounded"
-                      >
-                        +Bis Ant
-                      </button>
-                      <button 
-                        onClick={() => insertarBis(p.id, "DESPUES")}
-                        className="text-[10px] bg-gray-200 hover:bg-gray-300 text-gray-700 px-2 py-1 rounded"
-                      >
-                        +Bis Des
-                      </button>
-                   </div>
-                   {/* Botón Borrar (opcional, pequeño y rojo) */}
-                   <button 
-                     onClick={() => borrarPiquete(p.id)}
-                     className="text-[10px] text-red-500 hover:text-red-700 underline"
-                   >
-                     Borrar
-                   </button>
+                    
+                    <div className="flex flex-wrap gap-1">
+                        {p.sin_novedad && <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-md font-extrabold tracking-wide uppercase">S/N</span>}
+                        {p.anomalias_count > 0 && <span className="text-[10px] bg-red-100 text-red-800 border border-red-300 px-2 py-0.5 rounded-md font-extrabold tracking-wide uppercase flex items-center gap-1">🚨 {p.anomalias_count} Nov</span>}
+                    </div>
                 </div>
+                
+                {/* Detalles extra simples */}
+                <div className="text-[10px] text-gray-500 font-bold uppercase mt-1">
+                    {(p.tc_set) ? "✅ Cadena Registrada" : "⚠️ Faltan datos"}
+                </div>
+             </Link>
+
+             {/* ZONA DERECHA: Botones de Acción (BIS / Borrar) */}
+             <div className="flex flex-col w-16 border-l-2 border-gray-200 bg-gray-50">
+                <button 
+                  onClick={() => insertarBis(p.id, "ANTES")}
+                  className="flex-1 text-[9px] font-extrabold text-gray-700 bg-gray-100 hover:bg-gray-200 border-b-2 border-gray-200 uppercase transition-colors"
+                >
+                  + Ant
+                </button>
+                <button 
+                  onClick={() => insertarBis(p.id, "DESPUES")}
+                  className="flex-1 text-[9px] font-extrabold text-gray-700 bg-gray-100 hover:bg-gray-200 border-b-2 border-gray-200 uppercase transition-colors"
+                >
+                  + Des
+                </button>
+                <button 
+                  onClick={() => borrarPiquete(p.id)}
+                  className="flex-1 text-[9px] font-extrabold text-red-600 bg-red-50 hover:bg-red-100 uppercase transition-colors"
+                >
+                  Borrar
+                </button>
              </div>
           </li>
         ))}
       </ul>
-      {/* Botón Finalizar */}
-        <button onClick={finalizar} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-4 rounded-lg shadow-lg text-lg uppercase tracking-wider mb-8">
-            FINALIZAR RECORRIDO
-        </button>
       
-      {filtrados.length === 0 && <div className="text-center text-gray-500 mt-10">No hay piquetes.</div>}
+      {filtrados.length === 0 && <div className="text-center text-gray-500 font-bold mt-10 p-6 border-2 border-dashed border-gray-300 rounded-xl">No hay piquetes para mostrar.</div>}
 
-      
+      {/* ========================================================= */}
+      {/* BOTÓN FINALIZAR RECORRIDO */}
+      {/* ========================================================= */}
+      <div className="pt-4">
+          <button 
+            onClick={finalizar} 
+            className="w-full py-4 rounded-xl bg-emerald-600 text-white font-black text-lg uppercase tracking-widest shadow-[0_4px_14px_0_rgb(5,150,105,0.39)] border-2 border-emerald-800 hover:bg-emerald-700 active:scale-95 transition-all"
+          >
+              🏁 Finalizar Recorrido
+          </button>
+      </div>
+
     </div>
   );
 }

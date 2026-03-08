@@ -49,6 +49,12 @@ export default function PiqueteForm() {
   const { piqueteId } = useParams();
   const nav = useNavigate();
 
+  useEffect(() => {
+    // Si 'p' existe, hacemos scroll hacia arriba suavemente
+    if (p && p.id) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [piqueteId]);
   const [p, setP] = useState(null);
   const [err, setErr] = useState("");
   const [showNextBtn, setShowNextBtn] = useState(false);
@@ -397,6 +403,7 @@ export default function PiqueteForm() {
 
   if (!p) return <div className="max-w-md mx-auto p-4">Cargando...</div>;
 
+  
   return (
     <div className="max-w-md mx-auto p-4 space-y-4 pb-24">
       

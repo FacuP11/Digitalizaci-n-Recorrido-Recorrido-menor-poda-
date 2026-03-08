@@ -11,7 +11,7 @@ const sequelize = dbUrl
         ssl: { require: true, rejectUnauthorized: false } // Obligatorio para Neon y Render
       }
     })
-  : new Sequelize('planillas', process.env.DB_USER, process.env.DB_PASSWORD, { // <-- Pon tus datos locales aquí
+  : new Sequelize('planillas', process.env.DB_USER, process.env.DB_PASS, { // <-- Pon tus datos locales aquí
       host: 'localhost',
       dialect: 'postgres',
     });
