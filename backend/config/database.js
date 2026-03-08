@@ -1,15 +1,19 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
-const sequelize = new Sequelize(
-  process.env.DB_NAME,
-  process.env.DB_USER,
-  process.env.DB_PASS,
-  {
-    host: process.env.DB_HOST,
-    dialect: process.env.DB_DIALECT || 'postgres',
-    logging: false,
-  }
-);
+// Si existe DATABASE_URL en la nube, la usa. Si no, usa tu local para cuando programes en tu PC.
+const dbUrl = process.env.DATABASE_URL;
+
+const sequelize = dbUrl 
+  ? new Sequelize(dbUrl, {
+      dialect: 'postgres',
+      dialectOptions: {
+        ssl: { require: true, rejectUnauthorized: false } // Obligatorio para Neon y Render
+      }
+    })
+  : new Sequelize('planillas', process.env.DB_USER, process.env.DB_PASSWORD, { // <-- Pon tus datos locales aquí
+      host: 'localhost',
+      dialect: 'postgres',
+    });
 
 module.exports = sequelize;

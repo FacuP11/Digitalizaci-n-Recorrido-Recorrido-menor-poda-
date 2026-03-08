@@ -6,20 +6,13 @@ const cors = require('cors');
 
 // Importa sequelize y modelos (esto inicializa la conexión)
 const { sequelize } = require('./models');
-
 const app = express();
-
 // Middlewares
 app.use(cors());
 app.use(express.json());
-
-
 // Healthchecks
 app.get('/', (_req, res) => res.send('OK'));
 app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
-
-
-
 // Rutas reales 
 try {
   app.use('/recorridos', require('./routes/recorridos'));
