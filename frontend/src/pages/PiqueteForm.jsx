@@ -456,7 +456,7 @@ export default function PiqueteForm() {
                     <button 
                         key={lado}
                         onClick={() => setAislLado(lado)}
-                        className={`flex-1 py-2 rounded text-xs font-bold border uppercase ${aislLado === lado ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-600 border-gray-300'}`}
+                        cclassName={`flex-1 py-2 rounded-md text-xs font-extrabold border uppercase transition-colors ${aislLado === lado ? 'bg-blue-700 text-white border-blue-800 shadow-inner' : 'bg-gray-100 text-gray-700 border-gray-400 hover:bg-gray-200'}`}
                     >
                         Lado {lado}
                     </button>
@@ -516,15 +516,15 @@ export default function PiqueteForm() {
                             // Habilitar si hay al menos un dato cargado
                             disabled={!aislInputs[fase].int && !aislInputs[fase].ext}
                             onClick={() => agregarAislador('ROTO', fase)}
-                            className="bg-red-600 hover:bg-red-700 text-white text-[10px] py-1 px-1 rounded font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="bg-red-600 text-white hover:bg-red-700 text-[10px] py-1 px-1 rounded font-extrabold uppercase disabled:bg-gray-400 disabled:text-gray-100 disabled:cursor-not-allowed transition-colors"
                          >
                             + Roto
                          </button>
                          <button 
                             disabled={!aislInputs[fase].int && !aislInputs[fase].ext}
                             onClick={() => agregarAislador('CACHADO', fase)}
-                            className="bg-orange-500 hover:bg-orange-600 text-white text-[10px] py-1 px-1 rounded font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed"
-                         >
+                            className="bg-orange-600 text-white hover:bg-orange-700 text-[10px] py-1 px-1 rounded font-extrabold uppercase disabled:bg-gray-400 disabled:text-gray-100 disabled:cursor-not-allowed transition-colors"
+                            >
                             + Cach
                          </button>
                     </div>

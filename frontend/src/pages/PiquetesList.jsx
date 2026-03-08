@@ -339,6 +339,14 @@ function determinarPrioridad(anomalia) {
          </button>
       </div>
 
+      {/* --- NUEVO BOTÓN AGREGAR PIQUETE (ALTO CONTRASTE) --- */}
+      <button 
+          onClick={() => nav(`/recorridos/${id}/piquetes/nuevo`)}
+          className="w-full bg-blue-700 hover:bg-blue-800 text-white font-extrabold py-3 rounded-lg shadow-md mb-4 text-sm uppercase tracking-wide transition-colors"
+      >
+          + Agregar Piquete
+      </button>
+
       {/* Lista Piquetes */}
       <ul className="divide-y">
         {filtrados.map(p => (
@@ -390,7 +398,7 @@ function determinarPrioridad(anomalia) {
         ))}
       </ul>
       {/* Botón Finalizar */}
-        <button onClick={finalizar} className="px-3 py-2 rounded bg-red-600 text-emerald-900 font-bold text-xs hover:bg-red-700 shadow-sm">
+        <button onClick={finalizar} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-4 rounded-lg shadow-lg text-lg uppercase tracking-wider mb-8">
             FINALIZAR RECORRIDO
         </button>
       

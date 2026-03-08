@@ -101,7 +101,7 @@ export default function RecorridosList() {
       <header className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-blue-900">Mis Recorridos</h1>
-            <Link to="/recorridos/nuevo" className="px-4 py-2 rounded bg-blue-600 text-white font-bold text-sm shadow hover:bg-blue-700">
+            <Link to="/recorridos/nuevo" className="px-4 py-2 rounded-md bg-blue-700 text-white font-extrabold text-sm shadow-md hover:bg-blue-800 transition-colors">
                 + Nuevo
             </Link>
         </div>
@@ -110,14 +110,13 @@ export default function RecorridosList() {
         <div className="flex bg-gray-200 p-1 rounded-lg">
             <button 
                 onClick={() => setTab("PENDIENTES")}
-                className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${tab === "PENDIENTES" ? "bg-white text-blue-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                className={`flex-1 py-2 text-sm font-extrabold rounded-md transition-all ${tab === "PENDIENTES" ? "bg-white text-blue-900 shadow-md border-b-4 border-blue-600" : "bg-gray-200 text-gray-600 hover:bg-gray-300"}`}
             >
                 PENDIENTES ({pendientes.length})
             </button>
             <button 
                 onClick={() => setTab("HISTORIAL")}
-                className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${tab === "HISTORIAL" ? "bg-white text-blue-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-            >
+                className={`flex-1 py-2 text-sm font-extrabold rounded-md transition-all ${tab === "HISTORIAL" ? "bg-white text-blue-900 shadow-md border-b-4 border-blue-600" : "bg-gray-200 text-gray-600 hover:bg-gray-300"}`}>
                 HISTORIAL ({historial.length})
             </button>
         </div>
@@ -144,7 +143,7 @@ export default function RecorridosList() {
                 <button 
                    onClick={() => borrarFiltrados(historialFiltrado)}
                    disabled={deletingBulk}
-                   className={`px-3 py-2 text-xs font-bold text-white rounded shadow-sm ${deletingBulk ? 'bg-red-400' : 'bg-red-600 hover:bg-red-700'}`}
+                  className={`px-4 py-2 text-xs font-extrabold text-white rounded-md shadow-md transition-colors ${deletingBulk ? 'bg-gray-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-800'}`}
                 >
                    {deletingBulk ? "Borrando..." : `Borrar (${historialFiltrado.length})`}
                 </button>
