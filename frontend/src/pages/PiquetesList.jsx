@@ -448,12 +448,14 @@ function determinarPrioridad(anomalia) {
       {/* ========================================================= */}
       {/* BOTÓN FINALIZAR RECORRIDO */}
       {/* ========================================================= */}
-      <div className="pt-4">
+      <div className="sticky bottom-4 mt-8 z-50">
+          <div className="absolute inset-0 bg-emerald-600 blur-lg opacity-40 rounded-xl"></div>
           <button 
             onClick={finalizar} 
-            className="w-full py-4 rounded-xl bg-emerald-600 text-white font-black text-lg uppercase tracking-widest shadow-[0_4px_14px_0_rgb(5,150,105,0.39)] border-2 border-emerald-800 hover:bg-emerald-700 active:scale-95 transition-all"
+            className="relative w-full py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-black text-lg uppercase tracking-widest shadow-xl border-2 border-emerald-400 hover:from-emerald-700 hover:to-emerald-600 active:scale-95 transition-all flex justify-center items-center gap-3"
           >
-              🏁 Finalizar Recorrido
+              <span className="text-2xl">🏁</span> 
+              Finalizar Recorrido
           </button>
       </div>
 

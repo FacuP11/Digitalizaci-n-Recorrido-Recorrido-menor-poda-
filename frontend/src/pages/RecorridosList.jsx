@@ -240,18 +240,30 @@ export default function RecorridosList() {
                   )}
 
                   {/* Fila 3: Acciones (Botones) */}
-                  <div className="mt-4 flex items-center justify-between border-t-2 border-gray-100 pt-3">
-                     <Link to={`/recorridos/${r.id}/piquetes`} className="text-blue-700 font-extrabold text-sm uppercase tracking-wide flex items-center gap-1 hover:text-blue-900 transition-colors">
-                        {tab === "PENDIENTES" ? "Continuar →" : "Ver Reporte →"}
+                  {/* Fila 3: Acciones (Botones) */}
+                  <div className="mt-4 flex items-stretch justify-between gap-3 border-t-2 border-gray-100 pt-4">
+                     
+                     {/* BOTÓN PRINCIPAL (Gigante y con color según estado) */}
+                     <Link 
+                        to={`/recorridos/${r.id}/piquetes`} 
+                        className={`flex-1 flex justify-center items-center py-3 rounded-lg font-black text-sm uppercase tracking-widest shadow-sm transition-all active:scale-95 ${
+                            tab === "PENDIENTES" 
+                            ? "bg-blue-600 text-white border-2 border-blue-800 hover:bg-blue-700" 
+                            : "bg-emerald-600 text-white border-2 border-emerald-800 hover:bg-emerald-700"
+                        }`}
+                     >
+                        {tab === "PENDIENTES" ? "🚀 Continuar" : "📊 Ver Reporte"}
                      </Link>
 
+                     {/* BOTÓN BORRAR (Secundario, cuadrado y seguro) */}
                      <button
                         onClick={() => borrar(r.id)}
                         disabled={deletingId === r.id || deletingBulk}
-                        className="text-xs font-extrabold text-red-500 hover:text-red-700 uppercase tracking-wide disabled:text-gray-400 transition-colors"
+                        className="px-4 py-3 flex justify-center items-center text-xs font-black text-red-600 bg-red-50 border-2 border-red-200 rounded-lg hover:bg-red-100 hover:border-red-300 uppercase tracking-wide disabled:opacity-50 transition-colors active:scale-95 flex-shrink-0"
                      >
-                        {deletingId === r.id ? "Eliminando..." : "Eliminar"}
+                        {deletingId === r.id ? "⏳" : "🗑️ Borrar"}
                      </button>
+                     
                   </div>
                 </div>
               </li>
