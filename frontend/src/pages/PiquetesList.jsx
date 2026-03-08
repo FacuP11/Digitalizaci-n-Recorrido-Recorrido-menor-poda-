@@ -3,184 +3,251 @@ import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom"
 import { api } from "../lib/api.js";
 
 export default function PiquetesList() {
-  const { id } = useParams(); // id del recorrido actual
+  const { id } = useParams();
   const nav = useNavigate();
   const [sp, setSp] = useSearchParams();
 
-  const order = sp.get("order") === "desc" ? "desc" : "asc"; // por defecto asc
+  const order = sp.get("order") === "desc" ? "desc" : "asc";
   const [rec, setRec] = useState(null);
   const [piquetes, setPiquetes] = useState([]);
   const [err, setErr] = useState("");
-
-  // Filtros
-  const [filter, setFilter] = useState("ALL"); // ALL | NOV | SN
-
-  // Selector de recorrido simultáneo (partner)
+  const [filter, setFilter] = useState("ALL"); 
   const [todosRecorridos, setTodosRecorridos] = useState([]);
+  
   const [partnerId, setPartnerId] = useState(() => {
-    const k = `partner_for_${id}`;
-    return localStorage.getItem(k) || "";
+    return localStorage.getItem(`partner_for_${id}`) || "";
   });
 
-  // (opcional) Generar rápido
-  const [cant, setCant] = useState(0);
-
-  // Cargar encabezado + lista detalle + todos los recorridos para el selector
-  useEffect(() => {
-    (async () => {
-      try {
-        setErr("");
-        const [r, list, recs] = await Promise.all([
-          api(`/recorridos/${id}`),
-          api(`/recorridos/${id}/piquetes/detalle`), // incluye Anomalias, Observaciones
-          api(`/recorridos`),
-        ]);
-        setRec(r);
-        setPiquetes(list);
-        setTodosRecorridos(recs);
-
-        // Inicializar/validar partner guardado
-        const k = `partner_for_${id}`;
-        const saved = localStorage.getItem(k);
-        if (saved && saved !== String(id) && recs.some(x => String(x.id) === saved)) {
-          setPartnerId(saved);
-        } else {
-          setPartnerId("");
-          localStorage.removeItem(k);
-        }
-      } catch (e) { setErr(e.message); }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-
+  // --- FUNCIÓN DE CARGA (Restaurada para poder refrescar tras insertar BIS) ---
   async function cargar() {
     try {
       setErr("");
-      const list = await api(`/recorridos/${id}/piquetes/detalle`);
+      // Cargamos todo en paralelo para asegurar consistencia
+      const [r, list, recs] = await Promise.all([
+        api(`/recorridos/${id}`),
+        api(`/recorridos/${id}/piquetes/detalle`), 
+        api(`/recorridos`),
+      ]);
+      setRec(r);
       setPiquetes(list);
-    } catch (e) { setErr(e.message); }
+      setTodosRecorridos(recs);
+
+      // Lógica de persistencia del partner
+      const k = `partner_for_${id}`;
+      const saved = localStorage.getItem(k);
+      if (saved && saved !== String(id) && recs.some(x => String(x.id) === saved)) {
+        setPartnerId(saved);
+      } else {
+        setPartnerId("");
+        localStorage.removeItem(k);
+      }
+    } catch (e) { 
+      setErr(e.message); 
+    }
   }
 
-  // Generar piquetes rápido (si lo volvés a habilitar)
-  async function generar() {
-    try {
-      await api(`/recorridos/${id}/piquetes/generar`, {
-        method: "POST",
-        body: { cantidad: Number(cant || 0), por: { inicio: true, final: false }, ant: { inicio: 0, final: 0 } }
-      });
-      setCant(0);
-      cargar();
-    } catch (e) { setErr(e.message); }
-  }
+  // Cargar al montar el componente
+  useEffect(() => {
+    cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
+
+  // --- ACCIONES ---
+
+  // Restaurada: Insertar piquete BIS
   async function insertarBis(refId, posicion = "DESPUES") {
     try {
       await api(`/piquetes/${refId}/insertar`, { method: "POST", body: { posicion } });
-      cargar();
+      await cargar(); // Recargar la lista para ver el nuevo piquete
     } catch (e) { setErr(e.message); }
   }
 
-  async function finalizar() {
+  // Restaurada: Borrar piquete (útil para eliminar un BIS creado por error)
+  async function borrarPiquete(pid) {
+    if(!window.confirm("¿Borrar piquete?")) return;
     try {
-      await api(`/recorridos/${id}/finalizar`, { method: "POST" });
-      alert("Recorrido finalizado");
+      await api(`/piquetes/${pid}`, { method: "DELETE" });
+      await cargar();
     } catch (e) { setErr(e.message); }
   }
 
-  // Orden POR -> ANT -> número (155 antes que 155B)
-  function etiquetaRank(etq) {
-    if (etq === "POR") return { grp: 0, n: 0, suf: "" };
-    if (etq === "ANT") return { grp: 1, n: 0, suf: "" };
-    const m = String(etq).match(/^(\d+)([A-Za-z]*)$/);
-    if (m) return { grp: 2, n: Number(m[1]), suf: m[2] || "" };
-    return { grp: 3, n: Number.MAX_SAFE_INTEGER, suf: String(etq) };
+  function irAlPartner() {
+    if (partnerId) {
+        localStorage.setItem(`partner_for_${partnerId}`, id);
+        nav(`/recorridos/${partnerId}/piquetes?order=${order}`);
+    }
   }
+
+// --- FUNCIÓN FINALIZAR ---
+async function finalizar() {
+    // --- PASO 1: IDENTIFICAR QUÉ PIQUETES SE REVISARON REALMENTE ---
+    // Un piquete se considera "Revisado" si el operario interactuó con él 
+    // (Puso Sin Novedad, cargó una Anomalía o escribió una Observación)
+    const piquetesRevisados = piquetes.filter(p => 
+        p.sin_novedad || p.anomalias_count > 0 || (p.Observaciones && p.Observaciones.length > 0)
+    );
+
+    // --- PASO 2: VALIDACIÓN DE DATOS (Solo sobre lo revisado) ---
+    // Solo exigimos "Tipo de Cadena" en los piquetes que el operario dijo haber revisado.
+    // Los que no llegó a ver (por emergencia), no se validan.
+    const revisadosIncompletos = piquetesRevisados.filter(p => 
+        !p.tc_ss && !p.tc_sd && !p.tc_sv && !p.tc_scm && !p.tc_rs && !p.tc_rd
+    );
+
+    if (revisadosIncompletos.length > 0) {
+        const etiquetas = revisadosIncompletos.map(p => p.etiqueta).join(", ");
+        alert(`⛔ DATOS INCOMPLETOS EN PIQUETES REVISADOS\n\nUsted marcó actividad en los siguientes piquetes pero olvidó seleccionar el "Tipo de Cadena":\n${etiquetas}\n\nPor favor, complete ese dato antes de finalizar.`);
+        return; // Bloqueamos. No es emergencia olvidar un dato en algo que sí viste.
+    }
+
+    // --- PASO 3: DETECCIÓN DE EMERGENCIA (Faltantes) ---
+    const total = piquetes.length;
+    const cantidadFaltantes = total - piquetesRevisados.length;
+    
+    let esEmergencia = false;
+    let motivoCierre = "Finalizado Correctamente";
+
+    if (cantidadFaltantes > 0) {
+        // Faltan piquetes por revisar
+        const confirmacion = window.confirm(
+            `⚠️ RECORRIDO INCOMPLETO\n\n` +
+            `Se han revisado ${piquetesRevisados.length} de ${total} piquetes.\n` +
+            `Quedan ${cantidadFaltantes} sin visitar.\n\n` +
+            `¿Es esto una EMERGENCIA o CAUSA MAYOR que impide continuar?`
+        );
+
+        if (!confirmacion) {
+            return; // El usuario dijo "No", entonces vuelve a la lista para seguir trabajando.
+        }
+        
+        // Si dijo "Sí", procedemos al cierre forzoso
+        esEmergencia = true;
+        motivoCierre = prompt("Ingrese el motivo de la emergencia (ej: Lluvia intensa, Vehículo roto, Accidente):") || "Emergencia no especificada";
+    } else {
+        // Están todos revisados
+        if (!window.confirm("¿Está seguro de finalizar el recorrido? Se enviará el reporte a supervisión.")) return;
+    }
+
+    try {
+        // --- PASO 4: GENERAR REPORTE (Solo con lo revisado) ---
+        let listaAnomalias = [];
+        
+        // Ordenamos para detectar POR/ANT correctamente
+        const listaOrdenadaTotal = [...piquetes].sort((a, b) => a.orden - b.orden);
+        const primerId = listaOrdenadaTotal[0]?.id;
+        const ultimoId = listaOrdenadaTotal[listaOrdenadaTotal.length - 1]?.id;
+
+        // IMPORTANTE: Solo iteramos sobre 'piquetesRevisados'. 
+        // Los no completados se ignoran en el reporte detallado (quedan como pendientes en la realidad).
+        piquetesRevisados.forEach(p => {
+            
+            // Lógica de Etiqueta (Lado A / Lado B)
+            let etiquetaReporte = p.etiqueta;
+            if (p.id === primerId && rec.entre_desde) etiquetaReporte = `${p.etiqueta} (${rec.entre_desde})`;
+            else if (p.id === ultimoId && rec.entre_hasta) etiquetaReporte = `${p.etiqueta} (${rec.entre_hasta})`;
+
+            // A. Anomalías
+            if (p.Anomalias && p.Anomalias.length > 0) {
+                p.Anomalias.forEach(a => {
+                    listaAnomalias.push({
+                        piquete: etiquetaReporte,
+                        codigo: a.ItemCatalogo?.codigo,
+                        descripcion: a.ItemCatalogo?.descripcion,
+                        detalle: a.valor_texto || a.valor_numero || "Ver detalle",
+                        prioridad: determinarPrioridad(a), 
+                        tipo: "ANOMALIA"
+                    });
+                });
+            }
+
+            // B. Observaciones
+            if (p.Observaciones && p.Observaciones.length > 0) {
+                p.Observaciones.forEach(o => {
+                    listaAnomalias.push({
+                        piquete: etiquetaReporte,
+                        codigo: "OBS",
+                        descripcion: "Observación General",
+                        detalle: o.texto,
+                        prioridad: "BAJA",
+                        tipo: "OBSERVACION"
+                    });
+                });
+            }
+        });
+
+        // Ordenar reporte por prioridad
+        const prioridades = { "ALTA": 1, "MEDIA": 2, "BAJA": 3 };
+        listaAnomalias.sort((a, b) => (prioridades[a.prioridad] || 99) - (prioridades[b.prioridad] || 99));
+
+        // Payload final
+        const reporteFinal = {
+            meta: {
+                fecha: new Date(),
+                linea: rec.linea,
+                ot: rec.ot_numero,
+                tramo: `${rec.entre_desde} - ${rec.entre_hasta}`,
+                usuario: "Operario Campo",
+                estadoCierre: esEmergencia ? "INCOMPLETO/EMERGENCIA" : "COMPLETO",
+                motivo: motivoCierre
+            },
+            estadisticas: {
+                total: total,
+                revisados: piquetesRevisados.length,
+                faltantes: cantidadFaltantes, // Dato útil para el supervisor
+                conNovedad: listaAnomalias.length > 0
+            },
+            planillaGeneral: listaAnomalias, 
+        };
+
+        // --- 5. ENVIAR ---
+        await api(`/recorridos/${id}/finalizar`, { 
+            method: "POST",
+            body: reporteFinal 
+        });
+
+        alert("Recorrido enviado exitosamente.");
+        nav('/'); 
+
+    } catch (e) { 
+        setErr(e.message); 
+    }
+}
+// --- HELPER PARA PRIORIDAD (Pégalo fuera de la función finalizar o al final del archivo) ---
+function determinarPrioridad(anomalia) {
+    const codigo = anomalia.ItemCatalogo?.codigo || "";
+    
+    // 1. Prioridad por PODA
+    if (codigo === "PODA" && anomalia.PodaDetalle) {
+        const u = anomalia.PodaDetalle.urgencia;
+        if (u === "I" || u === "U") return "ALTA"; // Inmediata o Urgente
+        if (u === "c/p") return "MEDIA"; // Corto Plazo
+        return "BAJA"; // Sin plazo
+    }
+
+    // 2. Prioridad por AISLADOR
+    if (codigo === "AISL_ROTO") return "ALTA"; // Roto siempre es grave
+    if (codigo === "AISL_CACHADO") return "MEDIA"; 
+
+    // 3. Prioridad por CONDUCTOR (Cables cortados o bajos son graves)
+    if (codigo.includes("COND_")) return "ALTA";
+    if (codigo.includes("COL_INCLINADA")) return "ALTA";
+
+    return "MEDIA"; // Default
+}
+
+  // --- FILTROS Y ORDEN ---
 
   const ordenados = useMemo(() => {
-    const base = [...piquetes].sort((a, b) => {
-      const A = etiquetaRank(a.etiqueta), B = etiquetaRank(b.etiqueta);
-      if (A.grp !== B.grp) return A.grp - B.grp;
-      if (A.n !== B.n) return A.n - B.n;
-      return A.suf.localeCompare(B.suf);
-    });
+    const base = [...piquetes].sort((a, b) => a.orden - b.orden);
     return order === "asc" ? base : base.reverse();
   }, [piquetes, order]);
 
   const filtrados = useMemo(() => {
-    const base = ordenados;
-    if (filter === "SN") return base.filter(p => p.sin_novedad);
-    if (filter === "NOV") return base.filter(p => !p.sin_novedad);
-    return base;
+    if (filter === "SN") return ordenados.filter(p => p.sin_novedad);
+    if (filter === "NOV") return ordenados.filter(p => p.anomalias_count > 0 || (p.Observaciones && p.Observaciones.length > 0));
+    return ordenados;
   }, [ordenados, filter]);
-
-  function BadgePORANT(etiqueta) {
-    if (etiqueta === "POR" || etiqueta === "ANT") {
-      return <span className="px-2 py-1 rounded text-xs bg-gray-200">{etiqueta}</span>;
-    }
-    return null;
-  }
-
-  function resumenTipoCadena(p) {
-    const tipos = [];
-    if (p.tc_ss) tipos.push("SS");
-    if (p.tc_sd) tipos.push("SD");
-    if (p.tc_sv) tipos.push("SV");
-    if (p.tc_scm) tipos.push("SCM");
-    if (p.tc_rs) tipos.push("RS");
-    if (p.tc_rd) tipos.push("RD");
-    if (!tipos.length) return "—";
-    const lado = p.tc_lado ? ` • ${p.tc_lado}` : "";
-    const cad = p.tc_cadenas ? ` • ${p.tc_cadenas}` : "";
-    return `${tipos.join("/")} ${lado}${cad}`;
-  }
-
-  function resumenAnomalias(p) {
-    if (p.sin_novedad) {
-      return <span className="px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-700">SIN NOVEDAD</span>;
-    }
-
-    // OJO: el endpoint /detalle devuelve con alias 'Anomalias'
-    const anoms = p.Anomalias || p.Anomalia || [];
-    if (!anoms.length) {
-      return <span className="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800">FALTA completar</span>;
-    }
-
-    const max = 2;
-    const parts = anoms.slice(0, max).map(a => {
-      const desc = a.ItemCatalogo?.descripcion || a.ItemCatalogo?.codigo || a.item_id;
-      if (a.ItemCatalogo?.codigo === "PODA" && a.PodaDetalle) {
-        return `PODA ${a.PodaDetalle.urgencia}/${a.PodaDetalle.medio} (${a.PodaDetalle.cantidad_arboles})`;
-      }
-      if (a.ItemCatalogo?.codigo === "BALIZOR" && a.valor_texto) {
-        return `BALIZOR ${a.valor_texto}`;
-      }
-      if (a.valor_numero != null) return `${desc}: ${a.valor_numero}`;
-      if (a.valor_texto) return `${desc}: ${a.valor_texto}`;
-      if (a.marcado) return `${desc}: X`;
-      return desc;
-    });
-
-    const resto = anoms.length - max;
-    const txt = resto > 0 ? `${parts.join(" • ")} • +${resto}` : parts.join(" • ");
-    return <span className="text-xs bg-red-100 px-2 py-0.5 rounded text-gray-700">{txt}</span>;
-  }
-
-  // Borrar piquete
-  async function borrarPiquete(pid) {
-    const ok = window.confirm("¿Eliminar este piquete y sus marcas? Esta acción no se puede deshacer.");
-    if (!ok) return;
-    try {
-      await api(`/piquetes/${pid}`, { method: "DELETE" });
-      setPiquetes(list => list.filter(p => p.id !== pid));
-    } catch (e) { setErr(e.message); }
-  }
-
-  // Selector de partner: guardar en localStorage
-  function onPartnerChange(e) {
-    const v = e.target.value; // "" o id numérico
-    setPartnerId(v);
-    localStorage.setItem(`partner_for_${id}`, v);
-  }
 
   function toggleOrder() {
     const next = order === "desc" ? "asc" : "desc";
@@ -188,109 +255,121 @@ export default function PiquetesList() {
     setSp(sp, { replace: true });
   }
 
+  function onPartnerChange(e) {
+    const v = e.target.value;
+    setPartnerId(v);
+    if(v) localStorage.setItem(`partner_for_${id}`, v);
+    else localStorage.removeItem(`partner_for_${id}`);
+  }
+
+  if (!rec) return <div className="p-4">Cargando...</div>;
+
   return (
-    <div className="max-w-md mx-auto p-4 space-y-4">
-      {/* Volver + Finalizar + Header */}
+    <div className="max-w-md mx-auto p-4 space-y-4 pb-10">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <button onClick={() => nav('/')} className="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300">← Volver</button>
-        <h1 className="text-xl font-semibold">
-          Línea {rec?.linea || "—"} {rec ? `— ${rec.entre_desde} → ${rec.entre_hasta}` : ""}
-        </h1>
-        <button onClick={finalizar} className="px-3 py-2 rounded bg-emerald-600 text-white">Finalizar</button>
+        <div className="text-right">
+            <div className="text-xs text-gray-500 font-bold">LÍNEA</div>
+            <h1 className="text-xl font-bold text-blue-900">{rec.linea}</h1>
+        </div>
       </div>
+      
+      {err && <p className="text-red-600 text-center text-sm font-bold">{err}</p>}
 
-      {err && <p className="text-sm text-red-600">{err}</p>}
-
-      {/* Selector de recorrido simultáneo + Orden */}
-      <div className="border rounded p-3 space-y-2">
-        <div className="font-medium">Recorrido simultáneo (opcional)</div>
-        <select className="border p-2 rounded w-full" value={partnerId} onChange={onPartnerChange}>
-          <option value="">— Ninguno —</option>
+      {/* Selector Partner + BOTÓN CAMBIO RÁPIDO */}
+      <div className="border rounded p-3 space-y-3 bg-blue-50 border-blue-100">
+        <div className="font-bold text-sm text-blue-800">Línea Asociada</div>
+        <select className="border p-2 rounded w-full text-sm bg-white" value={partnerId} onChange={onPartnerChange}>
+          <option value="">— Ninguna —</option>
           {todosRecorridos
-            .filter(r => String(r.id) !== String(id)) // evitar el mismo
+            .filter(r => String(r.id) !== String(id))
             .map(r => (
               <option key={r.id} value={r.id}>
-                #{r.id} — Línea {r.linea} — Entre {r.entre_desde} y {r.entre_hasta}
+                 Línea {r.linea} (OT {r.ot_numero})
               </option>
             ))}
         </select>
-
-        <div className="flex items-center gap-3">
-          <span className="text-sm">Orden actual: <b>{order.toUpperCase()}</b></span>
-          <button className="px-2 py-1 rounded bg-gray-200" onClick={toggleOrder}>
-            Cambiar a {order === "desc" ? "ASC" : "DESC"}
-          </button>
-        </div>
+        
+        {partnerId && (
+            <button 
+                onClick={irAlPartner}
+                className="w-full py-3 rounded bg-white border-2 border-blue-600 text-blue-700 font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-50 shadow-sm"
+            >
+                ⇄ IR A LA LÍNEA ASOCIADA
+            </button>
+        )}
       </div>
 
-      {/* (Opcional) Panel para generar piquetes
-      <div className="flex gap-2 items-center">
-        <input className="border p-2 rounded w-24" type="number" min="0" placeholder="Cant."
-               value={cant} onChange={e=>setCant(e.target.value)} />
-        <button onClick={generar} className="px-3 py-2 rounded bg-blue-600 text-white">Generar</button>
-      </div> */}
-
-      {/* Filtros */}
-      <div className="flex gap-2">
-        <button onClick={() => setFilter("ALL")}
-          className={`px-3 py-1 rounded ${filter === "ALL" ? "bg-gray-900 text-white" : "bg-gray-200"}`}>
-          Todos
-        </button>
-        <button onClick={() => setFilter("NOV")}
-          className={`px-3 py-1 rounded ${filter === "NOV" ? "bg-gray-900 text-white" : "bg-gray-200"}`}>
-          Con novedad
-        </button>
-        <button onClick={() => setFilter("SN")}
-          className={`px-3 py-1 rounded ${filter === "SN" ? "bg-gray-900 text-white" : "bg-gray-200"}`}>
-          Sin novedad
-        </button>
+      {/* Filtros y Orden */}
+      <div className="flex justify-between items-center bg-gray-100 p-2 rounded">
+         <div className="flex gap-1">
+            <button onClick={() => setFilter("ALL")} className={`text-xs px-3 py-1 rounded ${filter === "ALL" ? "bg-gray-800 text-white" : "bg-white"}`}>Todos</button>
+            <button onClick={() => setFilter("NOV")} className={`text-xs px-3 py-1 rounded ${filter === "NOV" ? "bg-red-600 text-white" : "bg-white"}`}>Novedad</button>
+         </div>
+         <button onClick={toggleOrder} className="text-xs px-2 py-1 bg-white border rounded">
+            Orden: {order.toUpperCase()}
+         </button>
       </div>
 
-      {/* Lista */}
+      {/* Lista Piquetes */}
       <ul className="divide-y">
         {filtrados.map(p => (
           <li key={p.id} className="py-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="font-medium">Piq {p.etiqueta}</div>
-                  {BadgePORANT(p.etiqueta)}
-                </div>
-                <div className="text-xs text-gray-600 mt-0.5">
-                  Tipo cadena: {resumenTipoCadena(p)}
-                </div>
-                <div className="mt-1">
-                  {resumenAnomalias(p)}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {/* BIS */}
-                <div className="flex flex-col items-end gap-1">
-                  <button className="text-blue-700 underline text-xs" onClick={() => insertarBis(p.id, "ANTES")}>+BIS antes</button>
-                  <button className="text-blue-700 underline text-xs" onClick={() => insertarBis(p.id, "DESPUES")}>+BIS desp.</button>
-                </div>
-
-                {/* Abrir (pasa order + partner si está seleccionado) */}
-                <Link
-                  className="px-2 py-1 rounded bg-blue-600 text-white"
-                  to={`/piquetes/${p.id}?order=${order}${partnerId ? `&partner=${partnerId}` : ""}`}
+             <div className="flex justify-between items-center gap-2">
+                
+                {/* ZONA IZQUIERDA: Clic para abrir el formulario */}
+                <Link 
+                  to={`/piquetes/${p.id}?order=${order}${partnerId ? `&partner=${partnerId}` : ""}`} 
+                  className="flex-1 block"
                 >
-                  Abrir
+                    <div className="flex items-center gap-2">
+                        <div className="font-bold text-lg text-gray-900">Piq {p.etiqueta}</div>
+                        {/* Badges de estado */}
+                        {p.sin_novedad && <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">S/N</span>}
+                        {p.anomalias_count > 0 && <span className="text-[10px] bg-red-100 text-red-800 px-1.5 py-0.5 rounded font-bold">{p.anomalias_count} NOV</span>}
+                    </div>
+                    {/* Detalles extra simples */}
+                    {(p.tc_set) && <div className="text-xs text-gray-500">Cadena ok</div>}
                 </Link>
 
-                {/* Borrar */}
-                <button className="px-2 py-1 rounded bg-red-600 text-white" onClick={() => borrarPiquete(p.id)}>Borrar</button>
-              </div>
-            </div>
+                {/* ZONA DERECHA: Botones BIS y Borrar */}
+                <div className="flex flex-col items-end gap-1">
+                   {/* Botones BIS pequeños */}
+                   <div className="flex gap-1">
+                      <button 
+                        onClick={() => insertarBis(p.id, "ANTES")}
+                        className="text-[10px] bg-gray-200 hover:bg-gray-300 text-gray-700 px-2 py-1 rounded"
+                      >
+                        +Bis Ant
+                      </button>
+                      <button 
+                        onClick={() => insertarBis(p.id, "DESPUES")}
+                        className="text-[10px] bg-gray-200 hover:bg-gray-300 text-gray-700 px-2 py-1 rounded"
+                      >
+                        +Bis Des
+                      </button>
+                   </div>
+                   {/* Botón Borrar (opcional, pequeño y rojo) */}
+                   <button 
+                     onClick={() => borrarPiquete(p.id)}
+                     className="text-[10px] text-red-500 hover:text-red-700 underline"
+                   >
+                     Borrar
+                   </button>
+                </div>
+             </div>
           </li>
         ))}
       </ul>
+      {/* Botón Finalizar */}
+        <button onClick={finalizar} className="px-3 py-2 rounded bg-red-600 text-emerald-900 font-bold text-xs hover:bg-red-700 shadow-sm">
+            FINALIZAR RECORRIDO
+        </button>
+      
+      {filtrados.length === 0 && <div className="text-center text-gray-500 mt-10">No hay piquetes.</div>}
 
-      {/* Info cuando no hay piquetes */}
-      {(!err && filtrados.length === 0) && (
-        <p className="text-sm text-gray-600">No hay piquetes aún. Generá POR/ANT y numerados con el panel de arriba.</p>
-      )}
+      
     </div>
   );
 }

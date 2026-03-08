@@ -7,7 +7,18 @@ module.exports = (sequelize, DataTypes) => {
     ot_numero:   { type: DataTypes.STRING, allowNull: false },
     carga_amp:   { type: DataTypes.INTEGER, allowNull: false },
     fecha:       { type: DataTypes.DATEONLY, allowNull: false },
-    estado:      { type: DataTypes.ENUM('ACTIVO','FINALIZADO'), defaultValue: 'ACTIVO' }
+    estado: {
+      type: DataTypes.STRING,
+      defaultValue: 'PENDIENTE' // Valores: 'PENDIENTE', 'COMPLETO', 'EMERGENCIA'
+    },
+    motivo_cierre: {
+      type: DataTypes.TEXT,
+      allowNull: true // Aquí guardaremos "Lluvia", "Accidente", o null si fue normal
+    },
+    fecha_fin: {
+      type: DataTypes.DATE,
+      allowNull: true
+    }
   }, {
     tableName: 'recorridos'
   });

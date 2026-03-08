@@ -2,6 +2,8 @@
 const express = require('express');
 const router = express.Router();
 const { sequelize, Recorrido, Piquete, Anomalia, PodaDetalle } = require('../models');
+const { generarReporteExcel } = require('../generarExcel');
+
 /* RUTAS FIJAS PRIMERO*/
 router.get('/__ping', (_req, res) => res.json({ ok: true, scope: 'recorridos' })); // Ping para chequear montaje
 router.get('/', async (req, res) => {  // GET: lista de recorridos
@@ -76,6 +78,7 @@ router.get('/:id/piquetes/detalle', async (req, res) => {
 
     const piquetes = await Piquete.findAll({
       where: { recorrido_id: rid },
+      order: [['orden', 'ASC']], // <-- MANTENEMOS EL ORDEN CORRECTO DE GENERACIÓN
       include: [
         {
           model: Anomalia,
@@ -88,22 +91,6 @@ router.get('/:id/piquetes/detalle', async (req, res) => {
         { model: Observaciones, as: 'Observaciones' } // ← alias de Piquete.hasMany(Observaciones, { as:'Observaciones' })
       ]
     });
-
-    // Orden robusto: POR, ANT, luego numéricos, luego sufijos (p.ej. 155B)
-    const rank = (etq) => {
-      if (etq === 'POR') return { grp: 0, n: 0, suf: '' };
-      if (etq === 'ANT') return { grp: 1, n: 0, suf: '' };
-      const m = String(etq).match(/^(\d+)([A-Za-z]*)$/);
-      if (m) return { grp: 2, n: Number(m[1]), suf: m[2] || '' };
-      return { grp: 3, n: Number.MAX_SAFE_INTEGER, suf: String(etq) };
-    };
-    piquetes.sort((a, b) => {
-      const A = rank(a.etiqueta), B = rank(b.etiqueta);
-      if (A.grp !== B.grp) return A.grp - B.grp;
-      if (A.n !== B.n) return A.n - B.n;
-      return A.suf.localeCompare(B.suf);
-    });
-
     // Derivados para el front (tc_set y anomalias_count)
     const out = piquetes.map(p => {
       const plain = p.toJSON();
@@ -148,15 +135,45 @@ router.get('/:id/piquetes', async (req, res) => {
 
 
 
-// (opcional) POST /recorridos/:id/finalizar → marca FINALIZADO
+// RUTA FINALIZAR: Actualiza DB + Genera Excel
 router.post('/:id/finalizar', async (req, res) => {
   try {
-    const rec = await Recorrido.findByPk(req.params.id);
-    if (!rec) return res.status(404).json({ error: 'Recorrido no existe' });
-    rec.estado = 'FINALIZADO';
-    await rec.save();
-    res.json({ ok: true, recorrido: rec });
-  } catch (e) { res.status(400).json({ error: e.message }); }
+    const { id } = req.params;
+    const datosReporte = req.body; // El JSON completo que manda el frontend
+    const { meta } = datosReporte;
+
+    console.log(`📡 Finalizando Recorrido ID: ${id}`);
+
+    // 1. Actualizar Base de Datos (PostgreSQL)
+    const r = await Recorrido.findByPk(id);
+    if (!r) return res.status(404).json({ error: 'Recorrido no encontrado' });
+
+    const nuevoEstado = meta.estadoCierre.includes('EMERGENCIA') ? 'EMERGENCIA' : 'COMPLETO';
+
+    await r.update({
+      estado: nuevoEstado,
+      motivo_cierre: meta.motivo || null,
+      fecha_fin: new Date()
+    });
+    console.log("✅ Base de datos actualizada.");
+
+    // 2. Generar el Excel
+    console.log("📊 Iniciando generación de Excel...");
+    try {
+        // Pasamos los datos que vinieron del frontend al generador
+        const nombreArchivo = await generarReporteExcel(datosReporte);
+        console.log(`✅ Excel creado: ${nombreArchivo}`);
+    } catch (excelError) {
+        console.error("❌ Error generando Excel (pero se guardó en DB):", excelError.message);
+        // No fallamos la request completa si falla el excel, pero lo avisamos en consola
+    }
+
+    res.json({ ok: true, recorrido: r });
+
+  } catch (e) {
+    console.error("❌ Error general:", e);
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // **************** rutas (POST crear, generar piquetes, finalizar, etc.)...********************************
@@ -178,17 +195,18 @@ router.post('/:id/piquetes/generar', async (req, res) => {
     const piquetes = [];
     let orden = 1;
 
-    // ANT al INICIO (uno o más)
-    const antIni = Math.max(0, Number(ant.inicio || 0));
-    for (let i = 0; i < antIni; i++) {
-      piquetes.push({ recorrido_id: id, etiqueta: 'ANT', orden: orden++ });
-    }
-
-    // POR al INICIO (boolean)
+     // POR al INICIO (boolean)
     if (por.inicio) {
       piquetes.push({ recorrido_id: id, etiqueta: 'POR', orden: orden++ });
     }
 
+    // ANT al INICIO (uno o más)
+    const antIni = Math.max(0, Number(ant.inicio || 0));
+    for (let i = 0; i < antIni; i++) {
+      piquetes.push({ recorrido_id: id, etiqueta: `ANT-${i + 1}`, orden: orden++ });
+    }
+
+   
     // Piquetes numerados
     for (let i = 1; i <= n; i++) {
       piquetes.push({ recorrido_id: id, etiqueta: String(i), orden: orden++ });

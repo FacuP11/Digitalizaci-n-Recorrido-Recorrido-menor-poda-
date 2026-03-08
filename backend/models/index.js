@@ -8,6 +8,7 @@ const ItemCatalogo = require('./ItemCatalogo')(sequelize, DataTypes);
 const Anomalia = require('./Anomalia')(sequelize, DataTypes);
 const PodaDetalle = require('./PodaDetalle')(sequelize, DataTypes);
 const Observaciones = require('./Observaciones')(sequelize, DataTypes);
+const AisladorDetalle = require('./AisladorDetalle')(sequelize, DataTypes);
 
 // Asociaciones (solo aquí)
 Recorrido.hasMany(Piquete, { foreignKey: 'recorrido_id' });
@@ -31,6 +32,9 @@ Observaciones.belongsTo(Piquete, { as: 'Piquete', foreignKey: 'piquete_id' });
 Recorrido.hasMany(Observaciones, { as: 'Observaciones', foreignKey: 'recorrido_id' });
 Observaciones.belongsTo(Recorrido, { as: 'Recorrido', foreignKey: 'recorrido_id' });
 
+Anomalia.hasMany(AisladorDetalle, { as: 'AisladorDetalle', foreignKey: 'anomalia_id' });
+AisladorDetalle.belongsTo(Anomalia, { as: 'Anomalia', foreignKey: 'anomalia_id' });
+
 // Export
 module.exports = {
   sequelize,
@@ -40,4 +44,5 @@ module.exports = {
   Anomalia,
   PodaDetalle,
   Observaciones,
+  AisladorDetalle
 };

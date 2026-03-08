@@ -18,13 +18,9 @@ app.use(express.json());
 app.get('/', (_req, res) => res.send('OK'));
 app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
-// Routers (usar app.use, no app.get)
-app.use('/recorridos', require('./routes/recorridos'));
-app.use('/piquetes',  require('./routes/piquetes'));
 
 
-
-// Montá tus rutas reales (si ya las tenés)
+// Rutas reales 
 try {
   app.use('/recorridos', require('./routes/recorridos'));
 } catch (e) {
@@ -50,7 +46,7 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
     console.log('✔ DB conectada');
 
     // Crea/actualiza tablas en dev
-    await sequelize.sync();
+    await sequelize.sync(/* {force: true} */);
     console.log('✔ Tablas OK (sync)');
 
     app.listen(PORT, () => {
