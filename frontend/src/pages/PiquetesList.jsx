@@ -215,7 +215,6 @@ async function finalizar() {
         // Chequeamos si la respuesta tiene el nombre del archivo
         if (respuesta && respuesta.archivo) {
             
-            // ⚠️ REEMPLAZA ESTO POR LA URL REAL DE TU RENDER
             const URL_BACKEND = "https://recorridos-api-backend.onrender.com"; 
             
             // Armamos la URL exacta. Si tu API no usa "/api", quítalo. 

@@ -89,12 +89,12 @@ async function generarReporteExcel(datosReporte) {
         // 3. GENERAR NOMBRE Y GUARDAR
         // ==========================================
         // Limpiamos el nombre para que no tenga caracteres raros
-        const nombreLimpio = meta.linea.replace(/[^a-zA-Z0-9]/g, "_");
-        const nombreArchivo = `REPORTE_${nombreLimpio}_OT${meta.ot}_${Date.now()}.xlsx`;
+       const lineaLimpia = (meta.linea || "Sin_Linea").replace(/[^a-zA-Z0-9 \-]/g, "_");
+        const tramoLimpio = (meta.tramo || "Sin_Tramo").replace(/[^a-zA-Z0-9 \-]/g, "_");
+        const nombreArchivo = `Reporte Linea ${lineaLimpia} (${tramoLimpio})_${Date.now().toString().slice(-4)}.xlsx`;
         
         await workbook.xlsx.writeFile(nombreArchivo);
-        
-        console.log(`✅ Excel generado con éxito: ${nombreArchivo}`);
+        console.log(`✅ Excel NUEVO generado: ${nombreArchivo}`);
         return nombreArchivo;
 
     } catch (error) {
