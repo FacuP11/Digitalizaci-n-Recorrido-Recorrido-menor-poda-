@@ -1,6 +1,6 @@
 
 const BASE = import.meta.env.DEV 
-    ? "http://localhost:4000" 
+    ? "192.168.0.69:4000" 
     : "https://recorridos-api-backend.onrender.com";
 
 
