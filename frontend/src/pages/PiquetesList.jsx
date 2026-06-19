@@ -156,7 +156,10 @@ async function finalizar() {
                         descripcion: a.ItemCatalogo?.descripcion,
                         detalle: a.valor_texto || a.valor_numero || "Ver detalle",
                         prioridad: determinarPrioridad(a), 
-                        tipo: "ANOMALIA"
+                        tipo: "ANOMALIA",
+                        // 👇 ¡AQUÍ ESTÁ LA MAGIA! Pasamos los datos crudos al backend 👇
+                        PodaDetalle: a.PodaDetalle,
+                        AisladorDetalle: a.AisladorDetalle
                     });
                 });
             }
@@ -206,25 +209,18 @@ async function finalizar() {
             body: reporteFinal 
         });
 
-        // Vemos en consola qué nos devolvió exactamente el backend
         console.log("Respuesta del servidor:", respuesta);
-
         alert("Recorrido enviado exitosamente.");
 
         // --- 5. MAGIA DE DESCARGA (ANTI-BLOQUEOS) ---
-        // Chequeamos si la respuesta tiene el nombre del archivo
         if (respuesta && respuesta.archivo) {
-            
             const URL_BACKEND = "https://recorridos-api-backend.onrender.com"; 
-            
-            // Armamos la URL exacta. Si tu API no usa "/api", quítalo. 
             const linkDescarga = `${URL_BACKEND}/recorridos/descargar/${respuesta.archivo}`;
             console.log("Intentando descargar de:", linkDescarga);
 
-            // Truco: Creamos un botón invisible, lo agregamos a la página, lo "clickeamos" y lo borramos
             const enlaceInvisible = document.createElement('a');
             enlaceInvisible.href = linkDescarga;
-            enlaceInvisible.target = "_blank"; // Para que no te saque de la app
+            enlaceInvisible.target = "_blank"; 
             enlaceInvisible.download = respuesta.archivo;
             
             document.body.appendChild(enlaceInvisible);

@@ -10,30 +10,21 @@ async function generarReporteExcel(datosReporte) {
         await workbook.xlsx.readFile(pathPlantilla);
         
         // Trabajamos sobre la primera hoja
-        const hoja = workbook.worksheets[0]; // Toma la primera hoja del array
+        const hoja = workbook.worksheets[0]; 
 
         // ==========================================
         // 1. LLENADO DEL ENCABEZADO
-        // (Ajusta estas celdas mirando tu Excel original)
+        // ==========================================
         const meta = datosReporte.meta;
 
-        // Según tu CSV, la línea de datos está aprox en la Fila 7
-        // Verifica en tu Excel real si estas son las letras de columna correctas:
-        hoja.getCell('B7').value = meta.linea;          // Donde dice "LINEA N° ____"
-        hoja.getCell('F7').value = "132/220";           // Donde dice "RED ____ KV" (O saca el dato de meta si lo tienes)
-        hoja.getCell('G7').value = meta.tramo;          // Donde dice "Entre ___ y ___"
-        hoja.getCell('R7').value = meta.ot;             // Donde dice "OT N° ____" (está bien a la derecha)
+        hoja.getCell('B7').value = meta.linea;          
+        hoja.getCell('F7').value = "132/220";           
+        hoja.getCell('G7').value = meta.tramo;          
+        hoja.getCell('R7').value = meta.ot;             
         
-        // Firma del Supervisor / Operario (al final del archivo, filas 40 aprox)
-        // hoja.getCell('C45').value = meta.usuario; 
-
         // ==========================================
         // 2. LISTADO DE ANOMALÍAS
         // ==========================================
-        // Como la planilla tiene textos fijos, vamos a empezar a escribir 
-        // NUESTRA lista a partir de la fila 12 (debajo de los títulos),
-        // empujando lo que haya abajo o sobrescribiendo si prefieres.
-        
         const filaInicio = 12; 
         let filaActual = filaInicio;
 
@@ -59,20 +50,67 @@ async function generarReporteExcel(datosReporte) {
         const lista = datosReporte.planillaGeneral;
 
         lista.forEach((item) => {
-            // Insertamos los valores
+            // =========================================================
+            // 🔥 NUEVO: INTERCEPTAMOS Y MEJORAMOS LOS TEXTOS
+            // =========================================================
+            let detalleFinal = item.detalle || "";
+            let descFinal = item.descripcion || "";
+
+            // 1. LÓGICA PARA AISLADORES
+            if (item.codigo && item.codigo.startsWith('AISL_') && item.AisladorDetalle) {
+                // Forzamos un título claro en la descripción
+                const tipoRotura = item.codigo === 'AISL_ROTO' ? 'ROTO' : 'CACHADO';
+                descFinal = `💿 AISLADOR ${tipoRotura}`;
+
+                // Armamos el detalle con Fase, Lado y Cantidades
+                const aisl = Array.isArray(item.AisladorDetalle) ? item.AisladorDetalle[0] : item.AisladorDetalle;
+                if (aisl) {
+                    const partes = [];
+                    partes.push(`Fase: ${aisl.fase}`);
+                    if (aisl.lado_referencia) partes.push(`Lado: ${aisl.lado_referencia}`);
+                    
+                    const int = Number(aisl.cantidad_interior) || 0;
+                    const ext = Number(aisl.cantidad_exterior) || 0;
+                    
+                    if (int > 0 && ext > 0) partes.push(`Int: ${int} / Ext: ${ext}`);
+                    else if (int > 0) partes.push(`Int: ${int}`);
+                    else if (ext > 0) partes.push(`Ext: ${ext}`);
+
+                    detalleFinal = partes.join(' | ');
+                }
+            }
+
+            // 2. LÓGICA PARA PODA
+            if (item.codigo === 'PODA' || (item.descripcion && item.descripcion.includes('Poda'))) {
+                descFinal = "🌳 PODA - " + descFinal;
+                // Si el backend manda los datos crudos de poda, los sumamos al detalle
+                if (item.PodaDetalle) {
+                    const p = item.PodaDetalle;
+                    detalleFinal = `Urgencia: ${p.urgencia} | Medio: ${p.medio} | Cant: ${p.cantidad_arboles} | ${detalleFinal}`;
+                }
+            }
+
+            // =========================================================
+            // INSERCIÓN DE DATOS EN CELDAS
+            // =========================================================
             hoja.getCell(`A${filaActual}`).value = item.piquete;
             hoja.getCell(`B${filaActual}`).value = item.codigo;
-            hoja.getCell(`C${filaActual}`).value = item.descripcion;
-            hoja.getCell(`D${filaActual}`).value = item.detalle;
+            hoja.getCell(`C${filaActual}`).value = descFinal;
+            hoja.getCell(`D${filaActual}`).value = detalleFinal; // <- Detalle enriquecido
             
             const celdaPrio = hoja.getCell(`E${filaActual}`);
             celdaPrio.value = item.prioridad;
 
-            // Colores de Prioridad
+            // Colores de Prioridad y Texto
             if (item.prioridad === 'ALTA') {
                 celdaPrio.font = { color: { argb: 'FFFF0000' }, bold: true }; // Rojo
             } else if (item.prioridad === 'MEDIA') {
                 celdaPrio.font = { color: { argb: 'FFFFA500' }, bold: true }; // Naranja
+            }
+
+            // Si es Poda, pintamos la descripción de verde
+            if (item.codigo === 'PODA') {
+                hoja.getCell(`C${filaActual}`).font = { bold: true, color: { argb: 'FF006100' } };
             }
 
             // Bordes para que quede prolijo
@@ -88,14 +126,16 @@ async function generarReporteExcel(datosReporte) {
         // ==========================================
         // 3. GENERAR NOMBRE Y GUARDAR
         // ==========================================
-        // Limpiamos el nombre para que no tenga caracteres raros
-       const lineaLimpia = (meta.linea || "Sin_Linea").replace(/[^a-zA-Z0-9 \-]/g, "_");
+        const lineaLimpia = (meta.linea || "Sin_Linea").replace(/[^a-zA-Z0-9 \-]/g, "_");
         const tramoLimpio = (meta.tramo || "Sin_Tramo").replace(/[^a-zA-Z0-9 \-]/g, "_");
-        const nombreArchivo = `Reporte Linea ${lineaLimpia} (${tramoLimpio})_${Date.now().toString().slice(-4)}.xlsx`;
+        const nombreArchivo = `Reporte_Linea_${lineaLimpia}_(${tramoLimpio})_${Date.now().toString().slice(-4)}.xlsx`;
         
-        await workbook.xlsx.writeFile(nombreArchivo);
+        // Lo guardamos en la misma carpeta para que sea fácil de encontrar
+        const pathSalida = path.join(__dirname, nombreArchivo);
+        await workbook.xlsx.writeFile(pathSalida);
+        
         console.log(`✅ Excel NUEVO generado: ${nombreArchivo}`);
-        return nombreArchivo;
+        return nombreArchivo; // o pathSalida dependiendo de cómo lo mandes al frontend
 
     } catch (error) {
         console.error("❌ Error generando Excel:", error);

@@ -1,7 +1,7 @@
 // backend/routes/recorridos.js
 const express = require('express');
 const router = express.Router();
-const { sequelize, Recorrido, Piquete, Anomalia, PodaDetalle } = require('../models');
+const { sequelize, Recorrido, Piquete, Anomalia, PodaDetalle, Observaciones, AisladorDetalle } = require('../models');
 const { generarReporteExcel } = require('../generarExcel');
 const path = require('path');
 const fs = require('fs');
@@ -66,9 +66,11 @@ router.get('/:id', async (req, res) => {
 
 // ************************* Detalle. Se muetra los detalles en la lista de piquetes
 // GET /recorridos/:id/piquetes/detalle
+
 router.get('/:id/piquetes/detalle', async (req, res) => {
   try {
-    const { Recorrido, Piquete, Anomalia, ItemCatalogo, PodaDetalle, Observaciones } = require('../models');
+    // Aseguramos que AisladorDetalle se importe aquí adentro
+    const { Recorrido, Piquete, Anomalia, ItemCatalogo, PodaDetalle, Observaciones, AisladorDetalle } = require('../models');
 
     const rid = Number(req.params.id);
     if (!Number.isInteger(rid)) {
@@ -80,25 +82,27 @@ router.get('/:id/piquetes/detalle', async (req, res) => {
 
     const piquetes = await Piquete.findAll({
       where: { recorrido_id: rid },
-      order: [['orden', 'ASC']], // <-- MANTENEMOS EL ORDEN CORRECTO DE GENERACIÓN
+      order: [['orden', 'ASC']], 
       include: [
         {
-          model: Anomalia,
-          as: 'Anomalias',  // ← alias de la asociación Piquete.hasMany(Anomalia, { as:'Anomalias' })
+          model: Anomalia, // NIVEL 1: Anomalías
+          as: 'Anomalias', 
           include: [
+            // NIVEL 2: Lo que está adentro de las Anomalías
             { model: ItemCatalogo, attributes: ['codigo', 'descripcion', 'tipo_entrada', 'max_value'] },
-            { model: PodaDetalle, as: 'PodaDetalle' } // ← alias de Anomalia.hasOne(PodaDetalle, { as:'PodaDetalle' })
+            { model: PodaDetalle, as: 'PodaDetalle' },
+            { model: AisladorDetalle, as: 'AisladorDetalle' } // <- ¡Ahora sí está adentro de la anomalía!
           ]
         },
-        { model: Observaciones, as: 'Observaciones' } // ← alias de Piquete.hasMany(Observaciones, { as:'Observaciones' })
+        { model: Observaciones, as: 'Observaciones' } // Esto va al nivel del piquete
       ]
     });
-    // Derivados para el front (tc_set y anomalias_count)
+
     const out = piquetes.map(p => {
       const plain = p.toJSON();
       plain.tc_set = !!(plain.tc_ss || plain.tc_sd || plain.tc_sv || plain.tc_scm || plain.tc_rs || plain.tc_rd);
-      plain.anomalias_count = Array.isArray(plain.Anomalias) ? plain.Anomalias.length : 0; // ← alias plural
-      // opcional: ordenar observaciones por fecha (desc) si querés devolverlas ya ordenadas
+      plain.anomalias_count = Array.isArray(plain.Anomalias) ? plain.Anomalias.length : 0; 
+      
       if (Array.isArray(plain.Observaciones)) {
         plain.Observaciones.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       }

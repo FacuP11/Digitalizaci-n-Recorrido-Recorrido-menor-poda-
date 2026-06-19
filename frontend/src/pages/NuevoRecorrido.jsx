@@ -13,13 +13,16 @@ export default function NuevoRecorrido() {
     carga_amp: 0,
     fecha: new Date().toISOString().slice(0, 10),
 
-    piq_desde: "", // Antes era cantidad: 0
+    piq_desde: "", 
     piq_hasta: "",
-    // CAMBIO 1: Convertimos la posición de POR a dos booleanos independientes
     por_inicio: false,
     por_final: false,
     ant_inicio: 0,
-    ant_final: 0
+    ant_final: 0,
+    
+    // VARIABLES NUEVAS PARA LA LÍNEA PARALELA
+    crear_paralela: false,
+    linea_paralela: ""
   });
 
   const [err, setErr] = useState("");
@@ -38,8 +41,8 @@ export default function NuevoRecorrido() {
       setErr("");
       setSaving(true);
 
-      // 1) Crear encabezado (Queda igual)
-      const rec = await api("/recorridos", {
+      // --- 1) CREAR LÍNEA PRINCIPAL ---
+      const rec1 = await api("/recorridos", {
         method: "POST", 
         body: { 
           linea: form.linea,
@@ -52,23 +55,58 @@ export default function NuevoRecorrido() {
         } 
       });
       
-      // 2) Generar piquetes
-      // Quitamos el IF viejo que bloqueaba el paso. 
-      // Si el usuario puso números, el backend los procesa; si no, solo crea el encabezado.
-      await api(`/recorridos/${rec.id}/piquetes/generar`, {
+      // Generar piquetes de la Línea Principal
+      await api(`/recorridos/${rec1.id}/piquetes/generar`, {
         method: "POST",
         body: {
-          piq_desde: form.piq_desde,                 // Envia el "Desde"
-          piq_hasta: form.piq_hasta,                 // Envia el "Hasta"
-          por_inicio: !!form.por_inicio,             // Envia true/false directo
-          por_final: !!form.por_final,               // Envia true/false directo
-          ant_inicio: Number(form.ant_inicio || 0),  // Envia número directo
-          ant_final: Number(form.ant_final || 0)     // Envia número directo
+          piq_desde: form.piq_desde,                
+          piq_hasta: form.piq_hasta,                
+          por_inicio: !!form.por_inicio,            
+          por_final: !!form.por_final,              
+          ant_inicio: Number(form.ant_inicio || 0), 
+          ant_final: Number(form.ant_final || 0)    
         }
       });
 
-      // 3) Navegar a la lista de piquetes
-      nav(`/recorridos/${rec.id}/piquetes`);
+      // --- 2) CREAR LÍNEA PARALELA (Si está activado) ---
+      if (form.crear_paralela && form.linea_paralela) {
+          const rec2 = await api("/recorridos", {
+            method: "POST", 
+            body: { 
+              linea: form.linea_paralela, // ¡Acá mandamos el nombre de la 2da línea!
+              kv: form.kv,
+              entre_desde: form.entre_desde,
+              entre_hasta: form.entre_hasta,
+              ot_numero: form.ot_numero,
+              carga_amp: Number(form.carga_amp),
+              fecha: form.fecha
+            } 
+          });
+          
+          // Generar los mismos piquetes exactos para la Línea Paralela
+          await api(`/recorridos/${rec2.id}/piquetes/generar`, {
+            method: "POST",
+            body: {
+              piq_desde: form.piq_desde,                
+              piq_hasta: form.piq_hasta,                
+              por_inicio: !!form.por_inicio,            
+              por_final: !!form.por_final,              
+              ant_inicio: Number(form.ant_inicio || 0), 
+              ant_final: Number(form.ant_final || 0)    
+            }
+          });
+
+
+         
+      }
+
+      // 3) Navegar al inicio para ver las líneas listas (o directo a los piquetes si es una sola)
+      if (form.crear_paralela) {
+          nav(`/`); // Volvemos al menú principal para que puedan iniciar el modo vinculado
+      } else {
+          nav(`/recorridos/${rec1.id}/piquetes`);
+      }
+      
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -102,7 +140,7 @@ export default function NuevoRecorrido() {
         <div className="grid grid-cols-3 gap-3">
           <div className="col-span-2 flex flex-col">
               <label className="text-[10px] font-extrabold text-gray-500 uppercase mb-1 ml-1">Nombre de la Línea</label>
-              <input className="border-2 border-gray-400 p-3 rounded-xl bg-gray-50 text-gray-900 font-bold focus:border-blue-600 focus:bg-white outline-none transition-all" name="linea" placeholder="Ej: Rosario - Santa Fe" onChange={onChange} />
+              <input className="border-2 border-gray-400 p-3 rounded-xl bg-gray-50 text-gray-900 font-bold focus:border-blue-600 focus:bg-white outline-none transition-all" name="linea" placeholder="Ej: Terna 1" onChange={onChange} />
           </div>
           <div className="col-span-1 flex flex-col">
               <label className="text-[10px] font-extrabold text-gray-500 uppercase mb-1 ml-1">Tensión</label>
@@ -139,6 +177,21 @@ export default function NuevoRecorrido() {
             <label className="text-[10px] font-extrabold text-gray-500 uppercase mb-1 ml-1">Fecha</label>
             <input className="border-2 border-gray-400 p-3 rounded-xl bg-gray-50 text-gray-900 font-bold focus:border-blue-600 focus:bg-white outline-none transition-all w-full" type="date" name="fecha" value={form.fecha} onChange={onChange} /> 
         </div>
+
+        {/* 🚀 MAGIA AQUÍ: LÍNEA PARALELA */}
+        <div className="mt-4 p-3 bg-indigo-50 border-2 border-indigo-200 rounded-xl transition-all">
+            <label className="flex items-center gap-3 cursor-pointer font-black text-indigo-900 text-xs uppercase tracking-wide">
+                <input type="checkbox" name="crear_paralela" checked={form.crear_paralela} onChange={onChange} className="w-5 h-5 accent-indigo-700 cursor-pointer" />
+                ¿Crear línea paralela vinculada?
+            </label>
+            
+            {form.crear_paralela && (
+                <div className="mt-3 flex flex-col animate-fade-in">
+                    <label className="text-[10px] font-extrabold text-indigo-600 uppercase mb-1 ml-1">Nombre de la Línea Paralela</label>
+                    <input className="border-2 border-indigo-300 p-3 rounded-xl bg-white text-indigo-900 font-bold focus:border-indigo-600 outline-none transition-all shadow-inner" name="linea_paralela" placeholder="Ej: Terna 2" value={form.linea_paralela} onChange={onChange} />
+                </div>
+            )}
+        </div>
       </div>
 
       {/* ========================================================= */}
@@ -149,38 +202,21 @@ export default function NuevoRecorrido() {
            <span className="text-xl">⚙️</span> Piquetes del Tramo
         </div>
 
-        {/* 1. Numeración de Piquetes (DESDE / HASTA - DISEÑO COMPACTO) */}
+        {/* Numeración de Piquetes */}
         <div className="flex flex-col bg-blue-50 p-3 rounded-xl border-2 border-blue-200">
           <label className="text-xs font-extrabold text-blue-900 uppercase mb-2">Numeración a Recorrer</label>
           <div className="flex gap-2 items-center justify-between">
              
-             {/* Desde */}
              <div className="w-2/5 flex flex-col">
                  <span className="text-[10px] font-bold text-blue-800 mb-1 ml-1">Desde Nº:</span>
-                 <input 
-                    className="border-2 border-blue-400 p-2 rounded-lg bg-white text-blue-900 text-lg font-black focus:border-blue-700 outline-none text-center shadow-inner transition-all w-full" 
-                    type="number" 
-                    name="piq_desde" 
-                    placeholder="Ej: 75" 
-                    value={form.piq_desde || ""} 
-                    onChange={onChange} 
-                 />
+                 <input className="border-2 border-blue-400 p-2 rounded-lg bg-white text-blue-900 text-lg font-black focus:border-blue-700 outline-none text-center shadow-inner transition-all w-full" type="number" name="piq_desde" placeholder="Ej: 75" value={form.piq_desde || ""} onChange={onChange} />
              </div>
              
-             {/* Flecha visual */}
              <div className="font-black text-blue-300 text-xl flex-shrink-0">→</div>
              
-             {/* Hasta */}
              <div className="w-2/5 flex flex-col">
                  <span className="text-[10px] font-bold text-blue-800 mb-1 ml-1">Hasta Nº:</span>
-                 <input 
-                    className="border-2 border-blue-400 p-2 rounded-lg bg-white text-blue-900 text-lg font-black focus:border-blue-700 outline-none text-center shadow-inner transition-all w-full" 
-                    type="number" 
-                    name="piq_hasta" 
-                    placeholder="Ej: 54" 
-                    value={form.piq_hasta || ""} 
-                    onChange={onChange} 
-                 />
+                 <input className="border-2 border-blue-400 p-2 rounded-lg bg-white text-blue-900 text-lg font-black focus:border-blue-700 outline-none text-center shadow-inner transition-all w-full" type="number" name="piq_hasta" placeholder="Ej: 54" value={form.piq_hasta || ""} onChange={onChange} />
              </div>
              
           </div>
@@ -189,7 +225,7 @@ export default function NuevoRecorrido() {
           </div>
         </div>
 
-        {/* 2. POR (Botones de Alternancia Táctiles) */}
+        {/* POR (Botones de Alternancia Táctiles) */}
         <div className="flex flex-col">
           <div className="text-[10px] font-extrabold text-gray-500 uppercase mb-2 ml-1">Agregar Pórticos (POR)</div>
           <div className="flex gap-3">
@@ -204,7 +240,7 @@ export default function NuevoRecorrido() {
           </div>
         </div>
 
-        {/* 3. ANT (Anteriores) */}
+        {/* ANT (Anteriores) */}
         <div className="flex flex-col border-t-2 border-gray-100 pt-4">
           <div className="text-[10px] font-extrabold text-gray-500 uppercase mb-2 ml-1">Antenado (ANT)</div>
           <div className="grid grid-cols-2 gap-3">
@@ -229,7 +265,7 @@ export default function NuevoRecorrido() {
             disabled={saving} 
             className="w-full py-4 rounded-xl bg-emerald-600 text-white font-black text-lg uppercase tracking-widest shadow-[0_4px_14px_0_rgb(5,150,105,0.39)] border-2 border-emerald-800 hover:bg-emerald-700 active:scale-95 transition-all disabled:bg-gray-400 disabled:border-gray-500 disabled:shadow-none"
         >
-            {saving ? "Generando..." : "Crear Recorrido"}
+            {saving ? "Generando..." : (form.crear_paralela ? "Crear 2 Recorridos" : "Crear Recorrido")}
         </button>
         <button 
             onClick={() => nav('/')} 
@@ -240,4 +276,5 @@ export default function NuevoRecorrido() {
       </div>
 
     </div>
-  );}
+  );
+}

@@ -15,7 +15,7 @@ async function generarReporteExcel(datosReporte) {
             { header: '', key: 'colA', width: 30 }, // Piquete
             { header: '', key: 'colB', width: 20 }, // Código
             { header: '', key: 'colC', width: 45 }, // Descripción
-            { header: '', key: 'colD', width: 40 }, // Detalle
+            { header: '', key: 'colD', width: 55 }, // Detalle (Lo hacemos un poco más ancho para los aisladores)
             { header: '', key: 'colE', width: 15 }, // Prioridad
         ];
 
@@ -38,7 +38,6 @@ async function generarReporteExcel(datosReporte) {
         // ==========================================
         // 4. METADATA (DATOS DEL RECORRIDO)
         // ==========================================
-        // Estilo para las etiquetas (Negrita)
         const styleLabel = { font: { bold: true } };
 
         hoja.getCell(`A${filaActual}`).value = "LÍNEA:";
@@ -65,7 +64,6 @@ async function generarReporteExcel(datosReporte) {
         hoja.getCell(`A${filaActual}`).font = styleLabel;
         hoja.getCell(`B${filaActual}`).value = meta.usuario || "Técnico de Campo";
 
-        // Si fue emergencia, aviso en rojo
         if (meta.estadoCierre && meta.estadoCierre.includes('EMERGENCIA')) {
             hoja.getCell(`D${filaActual}`).value = "⚠️ CIERRE POR EMERGENCIA";
             hoja.getCell(`D${filaActual}`).font = { bold: true, color: { argb: 'FFFF0000' } };
@@ -73,7 +71,7 @@ async function generarReporteExcel(datosReporte) {
             hoja.getCell(`D${filaActual}`).value = `Motivo: ${meta.motivo}`;
         }
 
-        filaActual += 2; // Espacio antes de la tabla
+        filaActual += 2; 
 
         // ==========================================
         // 5. ENCABEZADOS DE LA TABLA
@@ -84,8 +82,8 @@ async function generarReporteExcel(datosReporte) {
         letras.forEach((l, i) => {
             const cell = hoja.getCell(`${l}${filaActual}`);
             cell.value = headers[i];
-            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }; // Blanco
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } }; // Azul medio
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }; 
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } }; 
             cell.alignment = { horizontal: 'center', vertical: 'middle' };
             cell.border = { top: {style:'thin'}, bottom: {style:'thin'}, left: {style:'thin'}, right: {style:'thin'} };
         });
@@ -102,21 +100,50 @@ async function generarReporteExcel(datosReporte) {
             // --- A. TÍTULO DEL GRUPO (PIQUETE) ---
             hoja.mergeCells(`A${filaActual}:E${filaActual}`);
             const celdaPiquete = hoja.getCell(`A${filaActual}`);
-            celdaPiquete.value = nombrePiquete; // Ej: "Piquete 5"
+            celdaPiquete.value = nombrePiquete; 
             celdaPiquete.font = { bold: true, size: 11 };
-            celdaPiquete.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } }; // Azul muy clarito
+            celdaPiquete.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } }; 
             celdaPiquete.border = { top: {style:'thin'}, bottom: {style:'thin'}, left: {style:'thin'}, right: {style:'thin'} };
             
             filaActual++;
 
             // --- B. LISTA DE ANOMALÍAS ---
             anomalias.forEach(item => {
+                
+                // ----------------------------------------------------
+                // 🔥 NUEVO: PROCESAMIENTO DINÁMICO DE DETALLES (AISLADORES)
+                // ----------------------------------------------------
+                let detalleFinal = item.detalle || "";
+
+                // Verificamos si es un Aislador y si el backend nos mandó los datos crudos (AisladorDetalle)
+                if (item.codigo && item.codigo.startsWith('AISL_') && item.AisladorDetalle) {
+                    const aisl = Array.isArray(item.AisladorDetalle) ? item.AisladorDetalle[0] : item.AisladorDetalle;
+                    if (aisl) {
+                        // Construimos un string profesional. Ej: "Fase R | Lado: INICIO | Int: 2 - Ext: 1"
+                        const partes = [];
+                        partes.push(`Fase: ${aisl.fase}`);
+                        if (aisl.lado_referencia) partes.push(`Lado: ${aisl.lado_referencia}`);
+                        
+                        // Solo mostramos 'Int' o 'Ext' si tienen un valor mayor a cero
+                        const int = Number(aisl.cantidad_interior) || 0;
+                        const ext = Number(aisl.cantidad_exterior) || 0;
+                        
+                        if (int > 0 && ext > 0) partes.push(`Roturas -> Int: ${int} / Ext: ${ext}`);
+                        else if (int > 0) partes.push(`Cantidad Int: ${int}`);
+                        else if (ext > 0) partes.push(`Cantidad Ext: ${ext}`);
+
+                        // Unimos todo con el separador " | "
+                        detalleFinal = partes.join(' | ');
+                    }
+                }
+
                 // Sangría visual en Columna A
                 hoja.getCell(`A${filaActual}`).value = "      ↳"; 
-                
                 hoja.getCell(`B${filaActual}`).value = item.codigo;
                 hoja.getCell(`C${filaActual}`).value = item.descripcion;
-                hoja.getCell(`D${filaActual}`).value = item.detalle;
+                
+                // Usamos la variable formateada
+                hoja.getCell(`D${filaActual}`).value = detalleFinal; 
                 
                 const celdaPrio = hoja.getCell(`E${filaActual}`);
                 celdaPrio.value = item.prioridad;
@@ -127,15 +154,24 @@ async function generarReporteExcel(datosReporte) {
                 // 1. PODA (Verde y Negrita)
                 if (item.codigo === 'PODA' || (item.descripcion && item.descripcion.includes('Poda'))) {
                     const celdaDesc = hoja.getCell(`C${filaActual}`);
-                    celdaDesc.font = { bold: true, color: { argb: 'FF006100' } }; // Verde oscuro
+                    celdaDesc.font = { bold: true, color: { argb: 'FF006100' } }; 
                     celdaDesc.value = "🌳 PODA - " + item.descripcion;
                 }
 
-                // 2. PRIORIDAD (Colores de semáforo)
+                // 2. AISLADORES (Icono para destacar en descripción)
+                if (item.codigo && item.codigo.startsWith('AISL_')) {
+                    const celdaDesc = hoja.getCell(`C${filaActual}`);
+                    const tipoRotura = item.codigo === 'AISL_ROTO' ? 'ROTO' : 'CACHADO';
+                    celdaDesc.value = `💿 AISLADOR ${tipoRotura}`; // Fuerza un título claro en la columna C
+                    // Damos un fondo muy sutil a la celda del detalle para que resalte
+                    hoja.getCell(`D${filaActual}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+                }
+
+                // 3. PRIORIDAD (Colores de semáforo)
                 if (item.prioridad === 'ALTA') {
-                    celdaPrio.font = { color: { argb: 'FFFF0000' }, bold: true }; // Rojo
+                    celdaPrio.font = { color: { argb: 'FFFF0000' }, bold: true }; 
                 } else if (item.prioridad === 'MEDIA') {
-                    celdaPrio.font = { color: { argb: 'FFED7D31' }, bold: true }; // Naranja
+                    celdaPrio.font = { color: { argb: 'FFED7D31' }, bold: true }; 
                 }
 
                 // Bordes de la fila
@@ -147,9 +183,6 @@ async function generarReporteExcel(datosReporte) {
 
                 filaActual++;
             });
-            
-            // Un pequeño separador invisible para que no quede todo pegado
-            // filaActual++; 
         }
 
         // ==========================================
@@ -168,7 +201,7 @@ async function generarReporteExcel(datosReporte) {
     }
 }
 
-// --- FUNCIÓN DE ORDENAMIENTO (Mantenemos la lógica de Poda primero) ---
+// --- FUNCIÓN DE ORDENAMIENTO ---
 function organizarDatosPorPiquete(listaPlana) {
     const grupos = {};
     if (!listaPlana) return grupos;
