@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api.js";
+import { piqueteSchema } from '../schemas/piqueteSchema'; // o definir las reglas locales
 
 // LISTA DE OPCIONES PARA CONDUCTORES
 const OPCIONES_CONDUCTORES = [
@@ -234,6 +235,23 @@ export default function PiqueteForm() {
     agregarAnomaliaLocal({ item_codigo: codigo, valor_texto: detalle });
     setCodigo(""); setDetalle("");
   }
+
+  function handleSubmit(e) {
+  e.preventDefault();
+
+  // Validar el estado del formulario antes de guardar u offline
+  const resultado = piqueteSchema.safeParse(formData);
+
+  if (!resultado.success) {
+    // Extraemos el primer error para mostrarlo en pantalla
+    const primerError = resultado.error.issues[0].message;
+    setMensajeError(primerError);
+    return;
+  }
+
+  // Si pasa la validación, procedemos a guardar (online u offline)
+  guardarPiquete(resultado.data);
+}
 
   const agregarConductor = () => agregarGenerico(condTipo, condDetalle, setCondTipo, setCondDetalle);
   const agregarColumna = () => agregarGenerico(colTipo, colDetalle, setColTipo, setColDetalle);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./lib/api.js";
 import "./index.css"; // asegurate de importar Tailwind
+import BannerConectividad from './components/BannerConectividad';
 
 export default function App() {
   const [recorridos, setRecorridos] = useState([]);
@@ -22,6 +23,8 @@ export default function App() {
   }, []);
 
   return (
+    <div className="min-h-screen bg-gray-100">
+      <BannerConectividad />
     <div className="max-w-md mx-auto p-4 space-y-4">
       <h1 className="text-xl font-semibold">Recorridos</h1>
 
@@ -38,5 +41,5 @@ export default function App() {
         ))}
       </ul>
     </div>
-  );
+  </div>);
 }

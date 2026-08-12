@@ -1,9 +1,17 @@
 // backend/routes/piquetes.js
+import express from 'express';
+import { crearPiquete } from '../controllers/piquetesController.js';
+import { validarSchema } from '../middlewares/validarSchema.js';
+import { piqueteSchema } from '../schemas/piqueteSchema.js';
+
 const express = require('express');
 const router = express.Router();
 const { Op } = require('sequelize');
 const { sequelize, Piquete, Anomalia, ItemCatalogo, PodaDetalle, AisladorDetalle, Observaciones, Recorrido } = require('../models');
+const router = express.Router();
 
+// La petición pasa por 'validarSchema(piqueteSchema)' ANTES de llegar a 'crearPiquete'
+router.post('/', validarSchema(piqueteSchema), crearPiquete);
 // GET Catálogo
 router.get('/__catalogo', async (_req, res) => {
   const items = await ItemCatalogo.findAll({ order: [['id', 'ASC']] });

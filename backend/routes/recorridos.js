@@ -1,3 +1,6 @@
+import express from 'express';
+import { generarReporteExcel } from '../generarExcel.js'; 
+
 // backend/routes/recorridos.js
 const express = require('express');
 const router = express.Router();
@@ -395,5 +398,15 @@ router.get('/descargar/:nombreArchivo', (req, res) => {
     } else {
         res.status(404).json({ error: "El archivo ya no existe o caducó." });
     }
+});
+// Ruta para descargar el archivo Excel de un recorrido
+router.get('/:id/excel', async (req, res, next) => {
+  try {
+    const nombreArchivo = await generarReporteExcel(req.params.id);
+    // res.download envía el archivo generado al navegador y lo elimina al terminar si lo deseas
+    res.download(nombreArchivo);
+  } catch (error) {
+    next(error); // Se lo envía a tu errorHandler global
+  }
 });
 module.exports = router;

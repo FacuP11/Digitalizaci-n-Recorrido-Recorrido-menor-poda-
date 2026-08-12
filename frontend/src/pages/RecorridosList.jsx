@@ -14,7 +14,14 @@ export default function RecorridosList() {
   // ESTADOS PARA EL FILTRO Y BORRADO MASIVO
   const [filtroLinea, setFiltroLinea] = useState("");
   const [deletingBulk, setDeletingBulk] = useState(false);
-
+// 1. Función para disparar la descarga del Excel
+  const handleDescargarExcel = (recorridoId) => {
+    // Si usas variables de entorno con Vite, puedes usar import.meta.env.VITE_API_URL
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    
+    // Abre una nueva pestaña/ventana enviando la petición al backend para descargar el .xlsx
+    window.open(`${API_URL}/api/recorridos/${recorridoId}/excel`, '_blank');
+  };
   async function cargar() {
     try {
       setErr("");
@@ -270,6 +277,30 @@ export default function RecorridosList() {
             );
         })}
       </ul>
+    </div>
+  );
+  return (
+    <div className="p-4">
+      <h2 className="text-xl font-bold mb-4">Recorridos de Inspección</h2>
+
+      {recorridos.map((recorrido) => (
+        <div key={recorrido.id} className="bg-white p-4 my-2 shadow rounded flex justify-between items-center">
+          <div>
+            <h3 className="font-bold text-lg">{recorrido.linea}</h3>
+            <p className="text-sm text-gray-600">
+              OT N°: {recorrido.ot} | Tramo: {recorrido.tramo}
+            </p>
+          </div>
+
+          {/* 2. Botón de exportación que llama a handleDescargarExcel */}
+          <button
+            onClick={() => handleDescargarExcel(recorrido.id)}
+            className="bg-green-700 hover:bg-green-800 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
+          >
+            📊 Exportar Excel
+          </button>
+        </div>
+      ))}
     </div>
   );
 }

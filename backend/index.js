@@ -1,4 +1,6 @@
 // index.js
+import { errorHandler } from './middlewares/errorHandler.js';
+import recorridosRoutes from './routes/recorridos.js';
 require('dotenv').config();
 
 const express = require('express');
@@ -13,6 +15,9 @@ app.use(express.json());
 // Healthchecks
 app.get('/', (_req, res) => res.send('OK'));
 app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
+app.use('/api/recorridos', recorridosRoutes);
+app.use('/api/piquetes', piquetesRoutes);
+app.use('/api/recorridos', recorridosRoutes);
 // Rutas reales 
 try {
   app.use('/recorridos', require('./routes/recorridos'));
@@ -50,4 +55,5 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
     console.error('✖ Fallo al iniciar API:', e);
     process.exit(1);
   }
-})();
+})()
+app.use(errorHandler);
