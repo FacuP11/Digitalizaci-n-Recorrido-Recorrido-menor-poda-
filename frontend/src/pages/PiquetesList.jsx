@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 
-// Helper para obtener el texto legible del tipo de cadena de un piquete
 function obtenerTextoCadena(p) {
   const tipos = [];
   if (p.tc_ss) tipos.push("SS");
@@ -21,8 +20,6 @@ export default function PiquetesList() {
   const nav = useNavigate();
   const [sp, setSp] = useSearchParams();
 
-  // "asc" = orden natural del recorrido (Desde -> Hasta)
-  // "desc" = orden inverso del recorrido (Hasta -> Desde)
   const order = sp.get("order") === "desc" ? "desc" : "asc";
   
   const [rec, setRec] = useState(null);
@@ -91,7 +88,6 @@ export default function PiquetesList() {
     }
   }
 
-  // --- FUNCIÓN FINALIZAR ---
   async function finalizar() {
     const piquetesRevisados = piquetes.filter(p => 
       p.sin_novedad || p.anomalias_count > 0 || (p.Observaciones && p.Observaciones.length > 0)
@@ -135,7 +131,6 @@ export default function PiquetesList() {
     try {
       let listaAnomalias = [];
       
-      // Ordenamiento numérico seguro para detectar extremos Lado A / Lado B
       const listaOrdenadaTotal = [...piquetes].sort((a, b) => Number(a.orden ?? 0) - Number(b.orden ?? 0));
       const primerId = listaOrdenadaTotal[0]?.id;
       const ultimoId = listaOrdenadaTotal[listaOrdenadaTotal.length - 1]?.id;
@@ -244,17 +239,11 @@ export default function PiquetesList() {
     return "MEDIA";
   }
 
-  // --- ORDENAMIENTO INMUTABLE Y SEGURO ---
   const ordenados = useMemo(() => {
     return [...piquetes].sort((a, b) => {
       const ordA = Number(a.orden ?? 0);
       const ordB = Number(b.orden ?? 0);
-
-      if (order === "asc") {
-        return ordA - ordB;
-      } else {
-        return ordB - ordA;
-      }
+      return order === "asc" ? ordA - ordB : ordB - ordA;
     });
   }, [piquetes, order]);
 
@@ -288,31 +277,31 @@ export default function PiquetesList() {
     else localStorage.removeItem(`partner_for_${id}`);
   }
 
-  if (!rec) return <div className="p-4 font-bold text-center">Cargando datos del recorrido...</div>;
+  if (!rec) return <div className="max-w-md mx-auto p-6 text-center font-black text-slate-800 dark:text-slate-100">Cargando datos del recorrido...</div>;
 
   return (
-    <div className="max-w-md mx-auto p-4 space-y-5 pb-24 bg-gray-50 min-h-screen">
+    <div className="layout-container">
       
       {/* HEADER */}
-      <div className="flex items-center justify-between border-b-2 border-gray-300 pb-3">
-        <button onClick={() => nav('/')} className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 font-extrabold text-sm transition-colors shadow-sm">
+      <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-sm">
+        <button onClick={() => nav('/')} className="btn-secondary !min-h-[38px] !text-xs">
           ← Volver
         </button>
         <div className="text-right">
-          <div className="text-[10px] text-gray-500 font-extrabold uppercase tracking-widest">Línea</div>
-          <h1 className="text-xl font-black text-blue-900 truncate max-w-[200px]">{rec.linea}</h1>
+          <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-black tracking-widest">Línea</div>
+          <h1 className="text-lg md:text-xl font-black text-blue-700 dark:text-blue-400 truncate max-w-[200px]">{rec.linea}</h1>
         </div>
       </div>
       
-      {err && <div className="bg-red-100 border-2 border-red-500 text-red-800 p-3 rounded-xl text-center text-sm font-extrabold shadow-sm">{err}</div>}
+      {err && <div className="bg-red-500 text-white p-3 rounded-xl text-center text-sm font-black shadow-md border-2 border-red-700">{err}</div>}
 
       {/* TARJETA: LÍNEA ASOCIADA */}
-      <div className="border-2 border-blue-300 rounded-xl p-4 bg-blue-50 shadow-sm space-y-3">
-        <div className="font-extrabold text-blue-900 text-sm uppercase tracking-wide flex items-center gap-2">
-          <span className="text-lg">🔗</span> Línea Asociada
+      <div className="card-base bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 space-y-3">
+        <div className="font-black text-blue-900 dark:text-blue-300 text-xs uppercase tracking-wider flex items-center gap-1.5">
+          <span>🔗</span> Línea Asociada (2da Terna)
         </div>
-        <select className="border-2 border-blue-400 p-3 rounded-lg w-full bg-white text-blue-900 font-bold focus:border-blue-700 outline-none transition-colors" value={partnerId} onChange={onPartnerChange}>
-          <option value="" className="text-gray-500 font-normal">— Ninguna —</option>
+        <select className="input-field" value={partnerId} onChange={onPartnerChange}>
+          <option value="" className="text-slate-400">— Ninguna —</option>
           {todosRecorridos
             .filter(r => String(r.id) !== String(id))
             .map(r => (
@@ -325,7 +314,7 @@ export default function PiquetesList() {
         {partnerId && (
           <button 
             onClick={irAlPartner}
-            className="w-full py-3 rounded-lg bg-blue-700 text-white border-2 border-blue-900 font-extrabold text-sm flex items-center justify-center gap-2 active:scale-95 shadow-sm transition-all uppercase tracking-wide"
+            className="btn-primary w-full !min-h-[44px] !text-xs"
           >
             ⇄ Ir a la línea asociada
           </button>
@@ -333,81 +322,81 @@ export default function PiquetesList() {
       </div>
 
       {/* BARRA DE FILTROS Y ORDEN */}
-      <div className="flex flex-col gap-2">
-        <div className="flex bg-gray-200 p-1.5 rounded-xl border-2 border-gray-300 shadow-inner items-center justify-between">
-          <div className="flex gap-1 flex-1">
+      <div className="flex flex-col gap-2.5">
+        <div className="flex bg-slate-200 dark:bg-slate-800 p-1.5 rounded-2xl border-2 border-slate-300 dark:border-slate-700 shadow-inner items-center justify-between gap-2">
+          <div className="flex gap-1.5 flex-1">
             <button 
               onClick={() => setFilter("ALL")} 
-              className={`flex-1 py-2 rounded-lg text-xs font-extrabold uppercase transition-all duration-200 ${filter === "ALL" ? "bg-gray-800 text-white shadow-md scale-[1.02]" : "text-gray-600 hover:bg-gray-300"}`}
+              className={`flex-1 min-h-[40px] rounded-xl text-xs font-black uppercase transition-all ${filter === "ALL" ? "bg-slate-900 text-white dark:bg-blue-600 shadow-md" : "text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700"}`}
             >
               Todos
             </button>
             <button 
               onClick={() => setFilter("NOV")} 
-              className={`flex-1 py-2 rounded-lg text-xs font-extrabold uppercase transition-all duration-200 ${filter === "NOV" ? "bg-red-600 text-white shadow-md scale-[1.02]" : "text-gray-600 hover:bg-gray-300"}`}
+              className={`flex-1 min-h-[40px] rounded-xl text-xs font-black uppercase transition-all ${filter === "NOV" ? "bg-red-600 text-white shadow-md" : "text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700"}`}
             >
               Novedades
             </button>
           </div>
           
-          <div className="w-px h-8 bg-gray-300 mx-2"></div>
+          <div className="w-px h-7 bg-slate-300 dark:bg-slate-600"></div>
 
           <button 
             onClick={toggleOrder} 
-            className="px-3 py-2 bg-white border-2 border-gray-300 rounded-lg text-xs font-extrabold text-gray-700 shadow-sm flex items-center gap-1 hover:bg-gray-50 active:scale-95 transition-all"
+            className="btn-secondary !min-h-[40px] !text-xs"
           >
-            {order === "asc" ? "⬇ ASC" : "⬆ DESC"}
+            {order === "asc" ? "⬇ Desde" : "⬆ Hasta"}
           </button>
         </div>
 
         <button 
           onClick={agregarPiqueteAlFinal}
-          className="w-full bg-blue-100 hover:bg-blue-200 text-blue-800 border-2 border-blue-400 font-extrabold py-3 rounded-xl shadow-sm text-sm uppercase tracking-wide transition-all active:scale-95 flex justify-center items-center gap-2"
+          className="btn-secondary w-full !border-2 !border-blue-400 dark:!border-blue-600 !text-blue-700 dark:!text-blue-300 !bg-blue-50 dark:!bg-blue-950/40"
         >
-          <span className="text-lg leading-none">+</span> Agregar Piquete al Final
+          <span className="text-base leading-none">+</span> Agregar Piquete al Final
         </button>
       </div>
 
       {/* LISTA DE PIQUETES */}
       <ul className="space-y-3">
         {filtrados.map(p => (
-          <li key={p.id} className="bg-white border-2 border-gray-300 rounded-xl shadow-sm flex overflow-hidden">
+          <li key={p.id} className="card-base !p-0 flex overflow-hidden hover:border-blue-400 dark:hover:border-blue-500 transition-all">
             <Link 
               to={`/piquetes/${p.id}?order=${order}${partnerId ? `&partner=${partnerId}` : ""}`} 
-              className="flex-1 p-3 flex flex-col justify-center active:bg-blue-50 transition-colors"
+              className="flex-1 p-3.5 flex flex-col justify-center active:bg-slate-100 dark:active:bg-slate-800 transition-colors"
             >
               <div className="flex items-center gap-3 mb-1">
-                <div className="font-black text-2xl text-gray-900 leading-none">
+                <div className="font-black text-2xl md:text-3xl text-slate-900 dark:text-white leading-none">
                   P.{p.etiqueta}
                 </div>
                 
-                <div className="flex flex-wrap gap-1">
-                  {p.sin_novedad && <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-md font-extrabold tracking-wide uppercase">S/N</span>}
-                  {p.anomalias_count > 0 && <span className="text-[10px] bg-red-100 text-red-800 border border-red-300 px-2 py-0.5 rounded-md font-extrabold tracking-wide uppercase flex items-center gap-1">🚨 {p.anomalias_count} Nov</span>}
+                <div className="flex flex-wrap gap-1.5">
+                  {p.sin_novedad && <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 px-2 py-0.5 rounded-md font-black tracking-wide uppercase">S/N</span>}
+                  {p.anomalias_count > 0 && <span className="text-[10px] bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border border-red-300 dark:border-red-700 px-2 py-0.5 rounded-md font-black tracking-wide uppercase flex items-center gap-1">🚨 {p.anomalias_count} Nov</span>}
                 </div>
               </div>
               
-              <div className="text-[10px] text-gray-500 font-bold uppercase mt-1">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-extrabold uppercase mt-1">
                 {p.tc_set ? `✅ Cadena: ${obtenerTextoCadena(p)}` : "⚠️ Faltan datos de cadena"}
               </div>
             </Link>
 
-            <div className="flex flex-col w-16 border-l-2 border-gray-200 bg-gray-50">
+            <div className="flex flex-col w-16 md:w-20 border-l-2 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80">
               <button 
                 onClick={() => insertarBis(p.id, "ANTES")}
-                className="flex-1 text-[9px] font-extrabold text-gray-700 bg-gray-100 hover:bg-gray-200 border-b-2 border-gray-200 uppercase transition-colors"
+                className="flex-1 text-[10px] font-black text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 border-b border-slate-200 dark:border-slate-800 uppercase transition-colors"
               >
                 + Ant
               </button>
               <button 
                 onClick={() => insertarBis(p.id, "DESPUES")}
-                className="flex-1 text-[9px] font-extrabold text-gray-700 bg-gray-100 hover:bg-gray-200 border-b-2 border-gray-200 uppercase transition-colors"
+                className="flex-1 text-[10px] font-black text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 border-b border-slate-200 dark:border-slate-800 uppercase transition-colors"
               >
                 + Des
               </button>
               <button 
                 onClick={() => borrarPiquete(p.id)}
-                className="flex-1 text-[9px] font-extrabold text-red-600 bg-red-50 hover:bg-red-100 uppercase transition-colors"
+                className="flex-1 text-[10px] font-black text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/60 uppercase transition-colors"
               >
                 Borrar
               </button>
@@ -416,16 +405,15 @@ export default function PiquetesList() {
         ))}
       </ul>
       
-      {filtrados.length === 0 && <div className="text-center text-gray-500 font-bold mt-10 p-6 border-2 border-dashed border-gray-300 rounded-xl">No hay piquetes para mostrar.</div>}
+      {filtrados.length === 0 && <div className="text-center text-slate-400 font-bold mt-10 p-8 border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-2xl">No hay piquetes para mostrar.</div>}
 
       {/* BOTÓN FINALIZAR */}
-      <div className="sticky bottom-4 mt-8 z-50">
-        <div className="absolute inset-0 bg-emerald-600 blur-lg opacity-40 rounded-xl"></div>
+      <div className="sticky bottom-4 mt-8 z-30">
         <button 
           onClick={finalizar} 
-          className="relative w-full py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-black text-lg uppercase tracking-widest shadow-xl border-2 border-emerald-400 hover:from-emerald-700 hover:to-emerald-600 active:scale-95 transition-all flex justify-center items-center gap-3"
+          className="btn-success w-full !min-h-[54px] !text-base shadow-2xl"
         >
-          <span className="text-2xl">🏁</span> 
+          <span className="text-xl">🏁</span> 
           Finalizar Recorrido
         </button>
       </div>

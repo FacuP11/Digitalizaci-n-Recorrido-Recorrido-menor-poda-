@@ -156,12 +156,8 @@ router.get('/:id/piquetes', async (req, res) => {
   }
 });
 
-/* -------------------------------------------------------------------------- */
-/* GENERACIÓN Y MANEJO INTELIGENTE DE PIQUETES                               */
-/* -------------------------------------------------------------------------- */
-
-// GENERAR PIQUETES (Secuencia: POR -> ANT -> PIQUETES -> ANT -> POR)
-// ===================================================================
+// GENERAR PIQUETES (Detecta automáticamente extremos según subida o bajada)
+// ===========================================================================
 router.post('/:id/piquetes/generar', async (req, res) => {
   try {
     const { id } = req.params;
@@ -177,30 +173,38 @@ router.post('/:id/piquetes/generar', async (req, res) => {
     const rec = await Recorrido.findByPk(id);
     if (!rec) return res.status(404).json({ error: 'Recorrido no existe' });
 
-    // Evitar duplicados
     const yaHay = await Piquete.count({ where: { recorrido_id: id } });
     if (yaHay > 0) return res.status(400).json({ error: 'Este recorrido ya tiene piquetes generados' });
+
+    const inicio = parseInt(piq_desde, 10);
+    const fin = parseInt(piq_hasta, 10);
+    const esBajada = inicio > fin; // Ejemplo: 75 -> 54
 
     const piquetes = [];
     let ordenBase = 10;
 
-    // 1. POR al INICIO (Pórtico de salida de la SE inicial)
-    if (por_inicio === true || por_inicio === 'true') {
+    // Determinar qué pórticos/antenados corresponden a la salida y a la llegada
+    // Extremo de Salida: si es bajada, arranca en el extremo final (B); si es subida, arranca en (A).
+    const tienePorSalida = esBajada ? (por_final === true || por_final === 'true') : (por_inicio === true || por_inicio === 'true');
+    const cantAntSalida = esBajada ? Math.max(0, parseInt(ant_final, 10) || 0) : Math.max(0, parseInt(ant_inicio, 10) || 0);
+
+    // Extremo de Llegada: si es bajada, termina en el extremo inicial (A); si es subida, termina en (B).
+    const cantAntLlegada = esBajada ? Math.max(0, parseInt(ant_inicio, 10) || 0) : Math.max(0, parseInt(ant_final, 10) || 0);
+    const tienePorLlegada = esBajada ? (por_inicio === true || por_inicio === 'true') : (por_final === true || por_final === 'true');
+
+    // 1. PÓRTICO DE SALIDA
+    if (tienePorSalida) {
       piquetes.push({ recorrido_id: id, etiqueta: 'POR', orden: ordenBase });
       ordenBase += 10;
     }
 
-    // 2. ANT al INICIO (Estructuras de antenado de salida)
-    const cantAntInicio = Math.max(0, parseInt(ant_inicio) || 0);
-    for (let i = 0; i < cantAntInicio; i++) {
+    // 2. ANTENADO DE SALIDA
+    for (let i = 0; i < cantAntSalida; i++) {
       piquetes.push({ recorrido_id: id, etiqueta: 'ANT', orden: ordenBase });
       ordenBase += 10;
     }
 
-    // 3. PIQUETES NUMERADOS (Torres de la traza, detecta subida o bajada)
-    const inicio = parseInt(piq_desde);
-    const fin = parseInt(piq_hasta);
-
+    // 3. PIQUETES NUMERADOS (75 -> 54 o 54 -> 75)
     if (!isNaN(inicio) && !isNaN(fin)) {
       const paso = (inicio <= fin) ? 1 : -1;
       for (let i = inicio; (paso > 0 ? i <= fin : i >= fin); i += paso) {
@@ -209,20 +213,19 @@ router.post('/:id/piquetes/generar', async (req, res) => {
       }
     }
 
-    // 4. ANT al FINAL (Estructuras de antenado de llegada)
-    const cantAntFinal = Math.max(0, parseInt(ant_final) || 0);
-    for (let i = 0; i < cantAntFinal; i++) {
+    // 4. ANTENADO DE LLEGADA
+    for (let i = 0; i < cantAntLlegada; i++) {
       piquetes.push({ recorrido_id: id, etiqueta: 'ANT', orden: ordenBase });
       ordenBase += 10;
     }
 
-    // 5. POR al FINAL (Pórtico de llegada a la SE destino)
-    if (por_final === true || por_final === 'true') {
+    // 5. PÓRTICO DE LLEGADA
+    if (tienePorLlegada) {
       piquetes.push({ recorrido_id: id, etiqueta: 'POR', orden: ordenBase });
       ordenBase += 10;
     }
 
-    // Guardar todos en la base de datos en orden
+    // Guardar en la base de datos
     await Piquete.bulkCreate(piquetes);
 
     const lista = await Piquete.findAll({ where: { recorrido_id: id }, order: [['orden', 'ASC']] });

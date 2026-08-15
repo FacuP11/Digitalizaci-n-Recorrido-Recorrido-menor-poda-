@@ -3,39 +3,31 @@ import { Link } from "react-router-dom";
 import { api } from "../lib/api.js";
 
 export default function RecorridosList() {
-  const [data, setData] = useState(null); // Iniciamos en null para saber que aún no cargó
+  const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   
-  // Estado para controlar qué pestaña vemos
-  const [tab, setTab] = useState("PENDIENTES"); // 'PENDIENTES' | 'HISTORIAL'
-
-  // ESTADOS PARA EL FILTRO Y BORRADO MASIVO
+  const [tab, setTab] = useState("PENDIENTES");
   const [filtroLinea, setFiltroLinea] = useState("");
   const [deletingBulk, setDeletingBulk] = useState(false);
-// 1. Función para disparar la descarga del Excel
+
   const handleDescargarExcel = (recorridoId) => {
-    // Si usas variables de entorno con Vite, puedes usar import.meta.env.VITE_API_URL
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-    
-    // Abre una nueva pestaña/ventana enviando la petición al backend para descargar el .xlsx
-    window.open(`${API_URL}/api/recorridos/${recorridoId}/excel`, '_blank');
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+    window.open(`${API_URL}/recorridos/${recorridoId}/excel`, '_blank');
   };
+
   async function cargar() {
     try {
       setErr("");
-      setLoading(true); // Prendemos el spinner
+      setLoading(true);
       const list = await api("/recorridos");
-      
-      // Aseguramos que lo que llegue sea una lista válida, si no, ponemos array vacío
       setData(Array.isArray(list) ? list : []); 
-      
     } catch (e) {
       setErr("Error de conexión: " + e.message);
-      setData([]); // Si falla, ponemos array vacío para que no explote
+      setData([]);
     } finally {
-      setLoading(false); // APAGAMOS EL SPINNER SÍ O SÍ
+      setLoading(false);
     }
   }
 
@@ -56,8 +48,6 @@ export default function RecorridosList() {
     }
   } 
 
-  // --- FUNCIÓN: BORRADO MASIVO ---
-  // (Deja tu función borrarFiltrados tal cual la tienes)
   async function borrarFiltrados(listaABorrar) {
     const cantidad = listaABorrar.length;
     if (cantidad === 0) return;
@@ -86,221 +76,172 @@ export default function RecorridosList() {
     }
   }
 
-  // ==========================================
-  // PANTALLA DE CARGA 
-  // ==========================================
   if (loading) {
-      return (
-          <div className="max-w-md mx-auto p-10 mt-20 text-center space-y-4">
-              <div className="animate-spin text-4xl text-blue-600 mx-auto w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full"></div>
-              <p className="text-gray-500 font-extrabold text-sm uppercase tracking-widest">Cargando recorridos...</p>
-          </div>
-      );
+    return (
+      <div className="max-w-md md:max-w-2xl mx-auto p-10 mt-20 text-center space-y-4">
+        <div className="animate-spin text-4xl text-blue-600 mx-auto w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+        <p className="text-slate-500 dark:text-slate-400 font-black text-sm uppercase tracking-widest">Cargando recorridos...</p>
+      </div>
+    );
   }
 
   if (!data) {
-      return <div className="p-10 text-center text-red-600 font-bold mt-10">❌ Error cargando la lista. {err}</div>;
+    return <div className="p-10 text-center text-red-600 font-bold mt-10">❌ Error cargando la lista. {err}</div>;
   }
 
-  // ==========================================
-  // LÓGICA DE FILTRADO 
-  // ==========================================
-  const pendientes = data.filter(r => !r.estado || r.estado === 'PENDIENTE');
-  const historial = data.filter(r => r.estado === 'COMPLETO' || r.estado === 'EMERGENCIA');
+  const pendientes = data.filter(r => !r.estado || r.estado === 'PENDIENTE' || r.estado === 'EN_CURSO');
+  const historial = data.filter(r => r.estado === 'COMPLETO' || r.estado === 'EMERGENCIA' || r.estado === 'FINALIZADO');
 
-  // Ordenar historial: Lo último finalizado arriba
   historial.sort((a, b) => new Date(b.fecha_fin || b.updatedAt) - new Date(a.fecha_fin || a.updatedAt));
-
-  // Extraer las líneas únicas que existen en el historial para armar el select
   const lineasDisponibles = [...new Set(historial.map(r => r.linea))].filter(Boolean);
 
-  // Aplicar filtro de línea si hay uno seleccionado
   const historialFiltrado = filtroLinea 
     ? historial.filter(r => r.linea === filtroLinea) 
     : historial;
 
-  // Seleccionamos cuál lista mostrar según la pestaña
   const listaVisible = tab === "PENDIENTES" ? pendientes : historialFiltrado;
 
   return (
-    <div className="max-w-md mx-auto p-4 space-y-4 pb-20">
+    <div className="layout-container">
       <header className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-black text-blue-900 tracking-wide">Mis Recorridos</h1>
-            <Link to="/recorridos/nuevo" className="px-5 py-2.5 rounded-lg bg-blue-700 text-white font-extrabold text-sm shadow-md hover:bg-blue-800 transition-colors uppercase tracking-wider">
-                + Nuevo
-            </Link>
+        <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-sm">
+          <div>
+            <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest block">Gestión de Líneas</span>
+            <h1 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-wide">Mis Recorridos</h1>
+          </div>
+          <Link to="/recorridos/nuevo" className="btn-primary !min-h-[42px] !text-xs">
+            + Nuevo
+          </Link>
         </div>
 
-        {/* PESTAÑAS DE NAVEGACIÓN */}
-        <div className="flex bg-gray-200 p-1.5 rounded-xl border-2 border-gray-300 shadow-inner">
-            <button 
-                onClick={() => setTab("PENDIENTES")}
-                className={`flex-1 py-2 text-xs font-extrabold rounded-lg uppercase transition-all duration-200 ${tab === "PENDIENTES" ? "bg-white text-blue-900 shadow-md border-2 border-blue-600 scale-[1.02]" : "text-gray-600 hover:bg-gray-300 border-2 border-transparent"}`}
-            >
-                Pendientes ({pendientes.length})
-            </button>
-            <button 
-                onClick={() => setTab("HISTORIAL")}
-                className={`flex-1 py-2 text-xs font-extrabold rounded-lg uppercase transition-all duration-200 ${tab === "HISTORIAL" ? "bg-white text-blue-900 shadow-md border-2 border-blue-600 scale-[1.02]" : "text-gray-600 hover:bg-gray-300 border-2 border-transparent"}`}
-            >
-                Historial ({historial.length})
-            </button>
+        {/* PESTAÑAS */}
+        <div className="flex bg-slate-200 dark:bg-slate-800 p-1.5 rounded-2xl border-2 border-slate-300 dark:border-slate-700 shadow-inner">
+          <button 
+            onClick={() => setTab("PENDIENTES")}
+            className={`flex-1 min-h-[42px] text-xs font-black rounded-xl uppercase transition-all ${tab === "PENDIENTES" ? "bg-white dark:bg-blue-600 text-blue-900 dark:text-white shadow-md" : "text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700"}`}
+          >
+            Pendientes ({pendientes.length})
+          </button>
+          <button 
+            onClick={() => setTab("HISTORIAL")}
+            className={`flex-1 min-h-[42px] text-xs font-black rounded-xl uppercase transition-all ${tab === "HISTORIAL" ? "bg-white dark:bg-blue-600 text-blue-900 dark:text-white shadow-md" : "text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700"}`}
+          >
+            Historial ({historial.length})
+          </button>
         </div>
 
-        {/* CONTROLES EXTRA (SOLO PARA HISTORIAL) */}
+        {/* FILTRO HISTORIAL */}
         {tab === "HISTORIAL" && historial.length > 0 && (
-          <div className="flex flex-col gap-2 bg-gray-50 p-3 rounded-xl border-2 border-gray-300 shadow-sm">
-             <div className="flex justify-between items-center">
-                <span className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wide">Filtro de Limpieza</span>
-             </div>
-             
-             <div className="flex gap-2">
-                <select 
-                   className="flex-1 border-2 border-gray-400 rounded-lg text-sm p-2 bg-white font-bold text-gray-800 outline-none focus:border-blue-600 transition-colors"
-                   value={filtroLinea}
-                   onChange={(e) => setFiltroLinea(e.target.value)}
-                >
-                   <option value="">Todas las líneas</option>
-                   {lineasDisponibles.map(linea => (
-                      <option key={linea} value={linea}>{linea}</option>
-                   ))}
-                </select>
-                
-                <button 
-                   onClick={() => borrarFiltrados(historialFiltrado)}
-                   disabled={deletingBulk}
-                  className={`px-4 py-2 text-xs font-extrabold text-white rounded-lg shadow-sm border-2 transition-all active:scale-95 ${deletingBulk ? 'bg-gray-500 border-gray-600 cursor-not-allowed' : 'bg-red-600 border-red-800 hover:bg-red-700'}`}
-                >
-                   {deletingBulk ? "⏳" : `Borrar (${historialFiltrado.length})`}
-                </button>
-             </div>
+          <div className="card-base bg-slate-50 dark:bg-slate-900/60 space-y-2">
+            <div className="label-title">Filtro de Limpieza</div>
+            <div className="flex gap-2">
+              <select 
+                className="input-field flex-1 !p-2 !text-xs"
+                value={filtroLinea}
+                onChange={(e) => setFiltroLinea(e.target.value)}
+              >
+                <option value="">Todas las líneas</option>
+                {lineasDisponibles.map(linea => (
+                  <option key={linea} value={linea}>{linea}</option>
+                ))}
+              </select>
+              
+              <button 
+                onClick={() => borrarFiltrados(historialFiltrado)}
+                disabled={deletingBulk}
+                className="btn-danger !min-h-[38px] !text-xs"
+              >
+                {deletingBulk ? "⏳" : `Borrar (${historialFiltrado.length})`}
+              </button>
+            </div>
           </div>
         )}
-
       </header>
 
-      {err && <div className="bg-red-100 border-2 border-red-500 text-red-800 p-3 rounded-xl text-sm text-center font-extrabold shadow-sm">{err}</div>}
+      {err && <div className="bg-red-500 text-white p-3 rounded-xl text-center text-sm font-black shadow-md border-2 border-red-700">{err}</div>}
 
       {listaVisible.length === 0 && (
-        <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50 mt-6">
-            <span className="text-4xl block mb-2">{tab === "PENDIENTES" ? "📭" : "📂"}</span>
-            <p className="text-gray-500 font-bold text-sm">
-              {tab === "PENDIENTES" ? "No tienes recorridos en curso." : "El historial está limpio."}
-            </p>
+        <div className="text-center py-14 border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-3xl bg-white dark:bg-slate-900 mt-6 shadow-sm">
+          <span className="text-4xl block mb-2">{tab === "PENDIENTES" ? "📭" : "📂"}</span>
+          <p className="text-slate-500 dark:text-slate-400 font-black text-sm">
+            {tab === "PENDIENTES" ? "No tienes recorridos en curso." : "El historial está limpio."}
+          </p>
         </div>
       )}
 
       <ul className="space-y-4">
         {listaVisible.map(r => {
-            let borderClass = "border-l-[6px] border-l-blue-600 border-blue-900"; 
-            let bgClass = "bg-white";
-            let estadoLabel = "EN PROCESO";
-            let estadoBg = "bg-blue-100 text-blue-800 border-blue-300";
-            
-            if (r.estado === 'COMPLETO') {
-                borderClass = "border-l-[6px] border-l-emerald-500 border-emerald-800";
-                estadoLabel = "COMPLETO";
-                estadoBg = "bg-emerald-100 text-emerald-800 border-emerald-300";
-            } else if (r.estado === 'EMERGENCIA') {
-                borderClass = "border-l-[6px] border-l-orange-500 border-orange-800 bg-orange-50";
-                estadoLabel = "EMERGENCIA";
-                estadoBg = "bg-orange-200 text-orange-900 border-orange-400 animate-pulse";
-            }
+          const esCompleto = r.estado === 'COMPLETO' || r.estado === 'FINALIZADO';
+          const esEmergencia = r.estado === 'EMERGENCIA';
 
-            return (
-              <li key={r.id} className={`relative rounded-xl border-2 shadow-sm overflow-hidden ${bgClass} ${borderClass}`}>
-                <div className="p-4">
-                  
-                  {/* Fila 1: Títulos y Badges */}
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1">
-                        <div className="text-[10px] text-gray-500 font-extrabold uppercase tracking-widest mb-1">
-                            Línea {r.linea} <span className="text-gray-400 font-normal">({r.kv} kV)</span>
-                        </div>
-                        <div className="text-xl font-black text-gray-900 leading-tight">
-                            OT: {r.ot_numero}
-                        </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2 ml-2">
-                        <span className={`px-2 py-1 border text-[9px] font-extrabold rounded-md uppercase tracking-wider ${estadoBg}`}>
-                            {estadoLabel}
-                        </span>
-                    </div>
+          return (
+            <li key={r.id} className="card-base !p-4 hover:border-blue-400 dark:hover:border-blue-500 transition-all">
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex-1">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-black uppercase tracking-widest mb-0.5">
+                    Línea {r.linea} <span className="font-bold">({r.kv} kV)</span>
                   </div>
-
-                  {/* Fila 2: Detalles */}
-                  <div className="text-sm font-bold text-gray-600 bg-gray-100 p-2 rounded-lg border border-gray-200 inline-block">
-                      Tramo: {r.entre_desde} ➝ {r.entre_hasta}
-                  </div>
-                        
-                  {tab === "HISTORIAL" && r.fecha_fin && (
-                      <div className="text-[10px] font-bold text-gray-400 mt-2 uppercase tracking-wide">
-                          Finalizado el: {new Date(r.fecha_fin).toLocaleDateString()}
-                      </div>
-                  )}
-
-                  {r.estado === 'EMERGENCIA' && r.motivo_cierre && (
-                    <div className="mt-3 text-xs text-orange-900 bg-orange-100 p-2.5 rounded-lg border-2 border-orange-200 font-bold">
-                        ⚠️ <span className="uppercase text-[10px]">Motivo:</span> {r.motivo_cierre}
-                    </div>
-                  )}
-
-                  {/* Fila 3: Acciones (Botones) */}
-                  {/* Fila 3: Acciones (Botones) */}
-                  <div className="mt-4 flex items-stretch justify-between gap-3 border-t-2 border-gray-100 pt-4">
-                     
-                     {/* BOTÓN PRINCIPAL (Gigante y con color según estado) */}
-                     <Link 
-                        to={`/recorridos/${r.id}/piquetes`} 
-                        className={`flex-1 flex justify-center items-center py-3 rounded-lg font-black text-sm uppercase tracking-widest shadow-sm transition-all active:scale-95 ${
-                            tab === "PENDIENTES" 
-                            ? "bg-blue-600 text-white border-2 border-blue-800 hover:bg-blue-700" 
-                            : "bg-emerald-600 text-white border-2 border-emerald-800 hover:bg-emerald-700"
-                        }`}
-                     >
-                        {tab === "PENDIENTES" ? "🚀 Continuar" : "📊 Ver Reporte"}
-                     </Link>
-
-                     {/* BOTÓN BORRAR (Secundario, cuadrado y seguro) */}
-                     <button
-                        onClick={() => borrar(r.id)}
-                        disabled={deletingId === r.id || deletingBulk}
-                        className="px-4 py-3 flex justify-center items-center text-xs font-black text-red-600 bg-red-50 border-2 border-red-200 rounded-lg hover:bg-red-100 hover:border-red-300 uppercase tracking-wide disabled:opacity-50 transition-colors active:scale-95 flex-shrink-0"
-                     >
-                        {deletingId === r.id ? "⏳" : "🗑️ Borrar"}
-                     </button>
-                     
+                  <div className="text-xl md:text-2xl font-black text-slate-900 dark:text-white leading-tight">
+                    OT: {r.ot_numero}
                   </div>
                 </div>
-              </li>
-            );
+                
+                <span className={`px-2.5 py-1 text-[10px] font-black rounded-lg uppercase tracking-wider ${
+                  esCompleto 
+                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700' 
+                    : esEmergencia 
+                    ? 'bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-300 border border-amber-400 dark:border-amber-700 animate-pulse'
+                    : 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+                }`}>
+                  {r.estado || "EN CURSO"}
+                </span>
+              </div>
+
+              <div className="text-xs md:text-sm font-extrabold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 inline-block mt-1">
+                Tramo: {r.entre_desde} ➝ {r.entre_hasta}
+              </div>
+                    
+              {tab === "HISTORIAL" && r.fecha_fin && (
+                <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-2 uppercase tracking-wide">
+                  Finalizado el: {new Date(r.fecha_fin).toLocaleDateString()}
+                </div>
+              )}
+
+              {esEmergencia && r.motivo_cierre && (
+                <div className="mt-2 text-xs text-amber-900 dark:text-amber-200 bg-amber-100 dark:bg-amber-950/60 p-2.5 rounded-xl border border-amber-300 dark:border-amber-700 font-extrabold">
+                  ⚠️ <span className="uppercase text-[10px]">Motivo:</span> {r.motivo_cierre}
+                </div>
+              )}
+
+              <div className="mt-4 flex items-stretch justify-between gap-2.5 border-t-2 border-slate-100 dark:border-slate-800 pt-3">
+                <Link 
+                  to={`/recorridos/${r.id}/piquetes`} 
+                  className={`flex-1 ${tab === "PENDIENTES" ? "btn-primary" : "btn-success"} !min-h-[42px] !text-xs`}
+                >
+                  {tab === "PENDIENTES" ? "🚀 Continuar" : "📊 Ver Piquetes"}
+                </Link>
+
+                {tab === "HISTORIAL" && (
+                  <button
+                    onClick={() => handleDescargarExcel(r.id)}
+                    className="btn-secondary !min-h-[42px] !text-xs !bg-emerald-50 dark:!bg-emerald-950/40 !text-emerald-700 dark:!text-emerald-300 !border-emerald-300 dark:!border-emerald-700"
+                  >
+                    📥 Excel
+                  </button>
+                )}
+
+                <button
+                  onClick={() => borrar(r.id)}
+                  disabled={deletingId === r.id || deletingBulk}
+                  className="btn-danger !min-h-[42px] !text-xs !px-3.5"
+                >
+                  {deletingId === r.id ? "⏳" : "🗑️"}
+                </button>
+              </div>
+            </li>
+          );
         })}
       </ul>
-    </div>
-  );
-  return (
-    <div className="p-4">
-      <h2 className="text-xl font-bold mb-4">Recorridos de Inspección</h2>
-
-      {recorridos.map((recorrido) => (
-        <div key={recorrido.id} className="bg-white p-4 my-2 shadow rounded flex justify-between items-center">
-          <div>
-            <h3 className="font-bold text-lg">{recorrido.linea}</h3>
-            <p className="text-sm text-gray-600">
-              OT N°: {recorrido.ot} | Tramo: {recorrido.tramo}
-            </p>
-          </div>
-
-          {/* 2. Botón de exportación que llama a handleDescargarExcel */}
-          <button
-            onClick={() => handleDescargarExcel(recorrido.id)}
-            className="bg-green-700 hover:bg-green-800 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
-          >
-            📊 Exportar Excel
-          </button>
-        </div>
-      ))}
     </div>
   );
 }
