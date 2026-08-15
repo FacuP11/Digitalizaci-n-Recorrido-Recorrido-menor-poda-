@@ -8,3 +8,4 @@ db.version(1).stores({
   recorridosPendientes: '++id, fecha, linea, sincronizado',
   piquetesPendientes: '++id, recorridoId, numeroPiquete, sincronizado'
 });
+export default db;

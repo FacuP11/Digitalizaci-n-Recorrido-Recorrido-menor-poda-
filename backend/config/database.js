@@ -1,5 +1,7 @@
-const { Sequelize } = require('sequelize');
-require('dotenv').config();
+import { Sequelize } from 'sequelize';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // Si existe DATABASE_URL en la nube, la usa. Si no, usa tu local para cuando programes en tu PC.
 const dbUrl = process.env.DATABASE_URL;
@@ -16,4 +18,4 @@ const sequelize = dbUrl
       dialect: 'postgres',
     });
 
-module.exports = sequelize;
+export default sequelize;

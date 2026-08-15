@@ -2,8 +2,11 @@
 export default {
   content: [
     "./index.html",
-    "./src/**/*.{js,jsx,ts,tsx}",
+    "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  theme: { extend: {} },
+  darkMode: 'media', // Se adapta al modo oscuro/claro del dispositivo automáticamente
+  theme: {
+    extend: {},
+  },
   plugins: [],
 }

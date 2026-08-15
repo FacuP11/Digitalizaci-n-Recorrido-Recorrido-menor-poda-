@@ -1,27 +1,46 @@
-import express from 'express';
-import { generarReporteExcel } from '../generarExcel.js'; 
-
 // backend/routes/recorridos.js
-const express = require('express');
-const router = express.Router();
-const { sequelize, Recorrido, Piquete, Anomalia, PodaDetalle, Observaciones, AisladorDetalle } = require('../models');
-const { generarReporteExcel } = require('../generarExcel');
-const path = require('path');
-const fs = require('fs');
+import express from 'express';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
-/* RUTAS FIJAS PRIMERO*/
-router.get('/__ping', (_req, res) => res.json({ ok: true, scope: 'recorridos' })); // Ping para chequear montaje
-router.get('/', async (req, res) => {  // GET: lista de recorridos
+import { generarReporteExcel } from '../generarExcel.js'; 
+import { 
+  sequelize, 
+  Recorrido, 
+  Piquete, 
+  Anomalia, 
+  ItemCatalogo, 
+  PodaDetalle, 
+  Observaciones, 
+  AisladorDetalle 
+} from '../models/index.js';
+
+// Definición de __dirname para ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const router = express.Router();
+
+/* -------------------------------------------------------------------------- */
+/* RUTAS FIJAS / LISTADO                                                     */
+/* -------------------------------------------------------------------------- */
+
+// Ping para chequear montaje
+router.get('/__ping', (_req, res) => res.json({ ok: true, scope: 'recorridos' }));
+
+// GET: lista de recorridos
+router.get('/', async (req, res) => {
   try {
-    const { Recorrido } = require('../models');
     const lista = await Recorrido.findAll({
       order: [['createdAt', 'DESC']],
       attributes: ['id', 'linea', 'kv', 'entre_desde', 'entre_hasta', 'ot_numero', 'carga_amp', 'estado', 'createdAt']
     });
     res.json(lista);
-  } catch (e) { res.status(400).json({ error: e.message }); }
+  } catch (e) { 
+    res.status(400).json({ error: e.message }); 
+  }
 });
-
 
 // POST: /recorridos → crea el encabezado de un recorrido
 router.post('/', async (req, res) => {
@@ -49,7 +68,7 @@ router.post('/', async (req, res) => {
       entre_hasta,
       ot_numero,
       carga_amp: Number(carga_amp),
-      fecha // estado por defecto lo define el modelo (EN_CURSO)
+      fecha
     });
 
     return res.status(201).json(creado);
@@ -58,23 +77,24 @@ router.post('/', async (req, res) => {
   }
 });
 
-//Traer encabezado ******************************
+// Traer encabezado individual
 router.get('/:id', async (req, res) => {
-  const { Recorrido } = require('../models');
-  const rec = await Recorrido.findByPk(req.params.id);
-  if (!rec) return res.status(404).json({ error: 'Recorrido no existe' });
-  res.json(rec);
+  try {
+    const rec = await Recorrido.findByPk(req.params.id);
+    if (!rec) return res.status(404).json({ error: 'Recorrido no existe' });
+    res.json(rec);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
+/* -------------------------------------------------------------------------- */
+/* DETALLE DE PIQUETES Y ANOMALÍAS                                            */
+/* -------------------------------------------------------------------------- */
 
-// ************************* Detalle. Se muetra los detalles en la lista de piquetes
 // GET /recorridos/:id/piquetes/detalle
-
 router.get('/:id/piquetes/detalle', async (req, res) => {
   try {
-    // Aseguramos que AisladorDetalle se importe aquí adentro
-    const { Recorrido, Piquete, Anomalia, ItemCatalogo, PodaDetalle, Observaciones, AisladorDetalle } = require('../models');
-
     const rid = Number(req.params.id);
     if (!Number.isInteger(rid)) {
       return res.status(400).json({ error: 'recorrido_id inválido' });
@@ -88,16 +108,15 @@ router.get('/:id/piquetes/detalle', async (req, res) => {
       order: [['orden', 'ASC']], 
       include: [
         {
-          model: Anomalia, // NIVEL 1: Anomalías
+          model: Anomalia,
           as: 'Anomalias', 
           include: [
-            // NIVEL 2: Lo que está adentro de las Anomalías
             { model: ItemCatalogo, attributes: ['codigo', 'descripcion', 'tipo_entrada', 'max_value'] },
             { model: PodaDetalle, as: 'PodaDetalle' },
-            { model: AisladorDetalle, as: 'AisladorDetalle' } // <- ¡Ahora sí está adentro de la anomalía!
+            { model: AisladorDetalle, as: 'AisladorDetalle' }
           ]
         },
-        { model: Observaciones, as: 'Observaciones' } // Esto va al nivel del piquete
+        { model: Observaciones, as: 'Observaciones' }
       ]
     });
 
@@ -119,13 +138,9 @@ router.get('/:id/piquetes/detalle', async (req, res) => {
   }
 });
 
-
-
-// GET: /recorridos/:id/piquetes -> obtenemos la lista (vacía si aún no hay)
+// GET: /recorridos/:id/piquetes -> lista de piquetes básicos
 router.get('/:id/piquetes', async (req, res) => {
   try {
-    const { Recorrido, Piquete } = require('../models');
-
     const rec = await Recorrido.findByPk(req.params.id);
     if (!rec) return res.status(404).json({ error: 'Recorrido no existe' });
 
@@ -135,138 +150,29 @@ router.get('/:id/piquetes', async (req, res) => {
       attributes: ['id', 'recorrido_id', 'etiqueta', 'orden', 'sin_novedad']
     });
 
-    // Devolver 200 aunque no haya piquetes
     return res.json(lista);
   } catch (e) {
     return res.status(400).json({ error: e.message });
   }
 });
 
+/* -------------------------------------------------------------------------- */
+/* GENERACIÓN Y MANEJO INTELIGENTE DE PIQUETES                               */
+/* -------------------------------------------------------------------------- */
 
-
-// RUTA FINALIZAR: Actualiza DB + Genera Excel
-router.post('/:id/finalizar', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const datosReporte = req.body; // El JSON completo que manda el frontend
-    const { meta } = datosReporte;
-
-    console.log(`📡 Finalizando Recorrido ID: ${id}`);
-
-    // 1. Actualizar Base de Datos (PostgreSQL)
-    const r = await Recorrido.findByPk(id);
-    if (!r) return res.status(404).json({ error: 'Recorrido no encontrado' });
-
-    const nuevoEstado = meta.estadoCierre.includes('EMERGENCIA') ? 'EMERGENCIA' : 'COMPLETO';
-
-    await r.update({
-      estado: nuevoEstado,
-      motivo_cierre: meta.motivo || null,
-      fecha_fin: new Date()
-    });
-    console.log("✅ Base de datos actualizada.");
-
-    // 2. Generar el Excel
-    console.log("📊 Iniciando generación de Excel...");
-    let nombreArchivoGenerado = null;
-    try {
-        // Pasamos los datos que vinieron del frontend al generador
-        nombreArchivoGenerado = await generarReporteExcel(datosReporte);
-        console.log(`✅ Excel creado: ${nombreArchivoGenerado}`);
-    } catch (excelError) {
-        console.error("❌ Error generando Excel (pero se guardó en DB):", excelError.message);
-        
-    }
-
-    res.json({ 
-        ok: true, 
-        recorrido: r, 
-        archivo: nombreArchivoGenerado 
-    });
-
-  } catch (e) {
-    console.error("❌ Error general:", e);
-    res.status(400).json({ error: e.message });
-  }
-});
-
-// Agregar un piquete inteligente
-router.post('/:id/piquetes/final', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { Piquete } = require('../models');
-
-        // 1. Traemos todos los piquetes ordenados
-        const piquetes = await Piquete.findAll({
-            where: { recorrido_id: id },
-            order: [['orden', 'ASC']]
-        });
-
-        // 2. Filtramos solo los que son puramente números
-        const numerados = piquetes.filter(p => !isNaN(parseInt(p.etiqueta)) && !p.etiqueta.includes('BIS'));
-
-        let nuevaEtiqueta = "NUEVO";
-        let nuevoOrden = 1000;
-
-        if (numerados.length > 0) {
-            // Buscamos cuál fue el último número real
-            const ultimoNumerado = numerados[numerados.length - 1];
-            const indiceOriginal = piquetes.findIndex(p => p.id === ultimoNumerado.id);
-            
-            // 3. ¿La línea va en subida (54->55) o en bajada (75->74)?
-            let paso = 1; // Por defecto sube
-            if (numerados.length >= 2) {
-                const penultimo = parseInt(numerados[numerados.length - 2].etiqueta);
-                const ultimo = parseInt(ultimoNumerado.etiqueta);
-                if (ultimo < penultimo) paso = -1; // Va en bajada
-            }
-            
-            // Asignamos el número que sigue matemáticamente
-            nuevaEtiqueta = (parseInt(ultimoNumerado.etiqueta) + paso).toString();
-
-            // 4. Calculamos su posición física (orden)
-            if (indiceOriginal === piquetes.length - 1) {
-                // No hay nada después (no hay POR final). Lo ponemos al final.
-                nuevoOrden = ultimoNumerado.orden + 1000;
-            } else {
-                // Hay algo después (ej: un POR final o ANT). Lo metemos justo en el medio.
-                const siguiente = piquetes[indiceOriginal + 1];
-                nuevoOrden = (ultimoNumerado.orden + siguiente.orden) / 2;
-            }
-        } else if (piquetes.length > 0) {
-             // Fallback por si no hay números en toda la línea
-             nuevoOrden = piquetes[piquetes.length - 1].orden + 1000;
-        }
-
-        const nuevo = await Piquete.create({
-            recorrido_id: id,
-            etiqueta: nuevaEtiqueta,
-            orden: nuevoOrden
-        });
-
-        res.json(nuevo);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// GENERAR PIQUETES (Soporta subida, bajada, POR y ANT)
-// =======================================================
+// GENERAR PIQUETES (Secuencia: POR -> ANT -> PIQUETES -> ANT -> POR)
+// ===================================================================
 router.post('/:id/piquetes/generar', async (req, res) => {
   try {
     const { id } = req.params;
-    
-    // Leemos los datos tal cual los manda el nuevo formulario del frontend
     const { 
-        piq_desde, 
-        piq_hasta, 
-        por_inicio, 
-        por_final, 
-        ant_inicio, 
-        ant_final 
+      piq_desde, 
+      piq_hasta, 
+      por_inicio, 
+      por_final, 
+      ant_inicio, 
+      ant_final 
     } = req.body;
-
-    const { Recorrido, Piquete } = require('../models');
 
     const rec = await Recorrido.findByPk(id);
     if (!rec) return res.status(404).json({ error: 'Recorrido no existe' });
@@ -276,51 +182,49 @@ router.post('/:id/piquetes/generar', async (req, res) => {
     if (yaHay > 0) return res.status(400).json({ error: 'Este recorrido ya tiene piquetes generados' });
 
     const piquetes = [];
-    let ordenBase = 10; // Usamos saltos de 10 para poder insertar "BIS" después
+    let ordenBase = 10;
 
-    // 1. ANT al INICIO
+    // 1. POR al INICIO (Pórtico de salida de la SE inicial)
+    if (por_inicio === true || por_inicio === 'true') {
+      piquetes.push({ recorrido_id: id, etiqueta: 'POR', orden: ordenBase });
+      ordenBase += 10;
+    }
+
+    // 2. ANT al INICIO (Estructuras de antenado de salida)
     const cantAntInicio = Math.max(0, parseInt(ant_inicio) || 0);
     for (let i = 0; i < cantAntInicio; i++) {
       piquetes.push({ recorrido_id: id, etiqueta: 'ANT', orden: ordenBase });
       ordenBase += 10;
     }
 
-    // 2. POR al INICIO
-    if (por_inicio === true || por_inicio === 'true') {
-      piquetes.push({ recorrido_id: id, etiqueta: 'POR', orden: ordenBase });
-      ordenBase += 10;
-    }
-
-    // 3. PIQUETES NUMERADOS (Detecta subida o bajada)
+    // 3. PIQUETES NUMERADOS (Torres de la traza, detecta subida o bajada)
     const inicio = parseInt(piq_desde);
     const fin = parseInt(piq_hasta);
 
     if (!isNaN(inicio) && !isNaN(fin)) {
-        const paso = (inicio <= fin) ? 1 : -1;
-        // Bucle inteligente: si paso es 1, suma hasta 'fin'. Si es -1, resta hasta 'fin'.
-        for (let i = inicio; (paso > 0 ? i <= fin : i >= fin); i += paso) {
-            piquetes.push({ recorrido_id: id, etiqueta: i.toString(), orden: ordenBase });
-            ordenBase += 10;
-        }
+      const paso = (inicio <= fin) ? 1 : -1;
+      for (let i = inicio; (paso > 0 ? i <= fin : i >= fin); i += paso) {
+        piquetes.push({ recorrido_id: id, etiqueta: i.toString(), orden: ordenBase });
+        ordenBase += 10;
+      }
     }
 
-    // 4. POR al FINAL
-    if (por_final === true || por_final === 'true') {
-      piquetes.push({ recorrido_id: id, etiqueta: 'POR', orden: ordenBase });
-      ordenBase += 10;
-    }
-
-    // 5. ANT al FINAL
+    // 4. ANT al FINAL (Estructuras de antenado de llegada)
     const cantAntFinal = Math.max(0, parseInt(ant_final) || 0);
     for (let i = 0; i < cantAntFinal; i++) {
       piquetes.push({ recorrido_id: id, etiqueta: 'ANT', orden: ordenBase });
       ordenBase += 10;
     }
 
-    // 6. Guardamos todos en la base de datos de un solo impacto (muy rápido)
+    // 5. POR al FINAL (Pórtico de llegada a la SE destino)
+    if (por_final === true || por_final === 'true') {
+      piquetes.push({ recorrido_id: id, etiqueta: 'POR', orden: ordenBase });
+      ordenBase += 10;
+    }
+
+    // Guardar todos en la base de datos en orden
     await Piquete.bulkCreate(piquetes);
 
-    // Devolvemos la lista generada
     const lista = await Piquete.findAll({ where: { recorrido_id: id }, order: [['orden', 'ASC']] });
     res.json(lista);
 
@@ -330,9 +234,129 @@ router.post('/:id/piquetes/generar', async (req, res) => {
   }
 });
 
+// Agregar piquete inteligente al final
+router.post('/:id/piquetes/final', async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    const piquetes = await Piquete.findAll({
+      where: { recorrido_id: id },
+      order: [['orden', 'ASC']]
+    });
 
-// DELETE: /recorridos/:id → borrar recorrido
+    const numerados = piquetes.filter(p => !isNaN(parseInt(p.etiqueta)) && !p.etiqueta.includes('BIS'));
+
+    let nuevaEtiqueta = "NUEVO";
+    let nuevoOrden = 1000;
+
+    if (numerados.length > 0) {
+      const ultimoNumerado = numerados[numerados.length - 1];
+      const indiceOriginal = piquetes.findIndex(p => p.id === ultimoNumerado.id);
+      
+      let paso = 1;
+      if (numerados.length >= 2) {
+        const penultimo = parseInt(numerados[numerados.length - 2].etiqueta);
+        const ultimo = parseInt(ultimoNumerado.etiqueta);
+        if (ultimo < penultimo) paso = -1;
+      }
+      
+      nuevaEtiqueta = (parseInt(ultimoNumerado.etiqueta) + paso).toString();
+
+      if (indiceOriginal === piquetes.length - 1) {
+        nuevoOrden = ultimoNumerado.orden + 1000;
+      } else {
+        const siguiente = piquetes[indiceOriginal + 1];
+        nuevoOrden = (ultimoNumerado.orden + siguiente.orden) / 2;
+      }
+    } else if (piquetes.length > 0) {
+      nuevoOrden = piquetes[piquetes.length - 1].orden + 1000;
+    }
+
+    const nuevo = await Piquete.create({
+      recorrido_id: id,
+      etiqueta: nuevaEtiqueta,
+      orden: nuevoOrden
+    });
+
+    res.json(nuevo);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* FINALIZAR Y REPORTES EXCEL                                                 */
+/* -------------------------------------------------------------------------- */
+
+router.post('/:id/finalizar', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const datosReporte = req.body;
+    const { meta } = datosReporte;
+
+    console.log(`📡 Finalizando Recorrido ID: ${id}`);
+
+    const r = await Recorrido.findByPk(id);
+    if (!r) return res.status(404).json({ error: 'Recorrido no encontrado' });
+
+    const nuevoEstado = meta?.estadoCierre?.includes('EMERGENCIA') ? 'EMERGENCIA' : 'COMPLETO';
+
+    await r.update({
+      estado: nuevoEstado,
+      motivo_cierre: meta?.motivo || null,
+      fecha_fin: new Date()
+    });
+    console.log("✅ Base de datos actualizada.");
+
+    console.log("📊 Iniciando generación de Excel...");
+    let nombreArchivoGenerado = null;
+    try {
+      nombreArchivoGenerado = await generarReporteExcel(datosReporte);
+      console.log(`✅ Excel creado: ${nombreArchivoGenerado}`);
+    } catch (excelError) {
+      console.error("❌ Error generando Excel (pero se guardó en DB):", excelError.message);
+    }
+
+    res.json({ 
+      ok: true, 
+      recorrido: r, 
+      archivo: nombreArchivoGenerado 
+    });
+
+  } catch (e) {
+    console.error("❌ Error general:", e);
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Descargar archivo Excel por nombre
+router.get('/descargar/:nombreArchivo', (req, res) => {
+  const { nombreArchivo } = req.params;
+  const filePath = path.join(__dirname, '../', nombreArchivo);
+
+  if (fs.existsSync(filePath)) {
+    res.download(filePath, nombreArchivo, (err) => {
+      if (err) console.error("Error al descargar:", err);
+    });
+  } else {
+    res.status(404).json({ error: "El archivo ya no existe o caducó." });
+  }
+});
+
+// Descargar Excel por ID de recorrido
+router.get('/:id/excel', async (req, res, next) => {
+  try {
+    const nombreArchivo = await generarReporteExcel(req.params.id);
+    res.download(nombreArchivo);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* ELIMINAR RECORRIDO                                                         */
+/* -------------------------------------------------------------------------- */
+
 router.delete('/:id', async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -343,7 +367,7 @@ router.delete('/:id', async (req, res) => {
       await t.rollback();
       return res.status(404).json({ error: 'Recorrido no existe' });
     }
-    // Piquetes del recorrido
+
     const piquetes = await Piquete.findAll({
       where: { recorrido_id: id },
       attributes: ['id'],
@@ -352,7 +376,6 @@ router.delete('/:id', async (req, res) => {
     const piqIds = piquetes.map(p => p.id);
 
     if (piqIds.length > 0) {
-      // Anomalías de esos piquetes
       const anoms = await Anomalia.findAll({
         where: { piquete_id: piqIds },
         attributes: ['id'],
@@ -360,17 +383,15 @@ router.delete('/:id', async (req, res) => {
       });
       const anomIds = anoms.map(a => a.id);
 
-      // 1) Detalle de poda
       if (anomIds.length > 0) {
         await PodaDetalle.destroy({ where: { anomalia_id: anomIds }, transaction: t });
+        await AisladorDetalle.destroy({ where: { anomalia_id: anomIds }, transaction: t });
       }
-      // 2) Anomalías
       await Anomalia.destroy({ where: { piquete_id: piqIds }, transaction: t });
-      // 3) Piquetes
+      await Observaciones.destroy({ where: { piquete_id: piqIds }, transaction: t });
       await Piquete.destroy({ where: { recorrido_id: id }, transaction: t });
     }
 
-    // 4) Recorrido
     await Recorrido.destroy({ where: { id }, transaction: t });
 
     await t.commit();
@@ -381,32 +402,4 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// Descargar archivo Excel
-router.get('/descargar/:nombreArchivo', (req, res) => {
-    const { nombreArchivo } = req.params;
-    
-    // Buscamos el archivo en la raíz del backend
-    const filePath = path.join(__dirname, '../', nombreArchivo);
-
-    if (fs.existsSync(filePath)) {
-        // res.download le dice al navegador "Descarga este archivo, no intentes leerlo"
-        res.download(filePath, nombreArchivo, (err) => {
-            if (err) console.error("Error al descargar:", err);
-            // Opcional: Borrar el archivo del servidor después de descargarlo para no ocupar espacio
-            // fs.unlinkSync(filePath); 
-        });
-    } else {
-        res.status(404).json({ error: "El archivo ya no existe o caducó." });
-    }
-});
-// Ruta para descargar el archivo Excel de un recorrido
-router.get('/:id/excel', async (req, res, next) => {
-  try {
-    const nombreArchivo = await generarReporteExcel(req.params.id);
-    // res.download envía el archivo generado al navegador y lo elimina al terminar si lo deseas
-    res.download(nombreArchivo);
-  } catch (error) {
-    next(error); // Se lo envía a tu errorHandler global
-  }
-});
-module.exports = router;
+export default router;

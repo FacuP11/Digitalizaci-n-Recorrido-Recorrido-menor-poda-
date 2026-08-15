@@ -1,5 +1,5 @@
 // backend/models/Observaciones.js
-module.exports = (sequelize, DataTypes) => {
+export default (sequelize, DataTypes) => {
   const Observaciones = sequelize.define('Observaciones', {
     recorrido_id: { type: DataTypes.INTEGER, allowNull: false },
     piquete_id:   { type: DataTypes.INTEGER, allowNull: false },

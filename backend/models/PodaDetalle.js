@@ -1,4 +1,4 @@
-module.exports = (sequelize, DataTypes) => {
+export default (sequelize, DataTypes) => {
   const PodaDetalle = sequelize.define('PodaDetalle', {
     anomalia_id:      { type: DataTypes.INTEGER, allowNull: false },
     urgencia:         { type: DataTypes.ENUM('s/p','c/p','U','I'), allowNull: false },

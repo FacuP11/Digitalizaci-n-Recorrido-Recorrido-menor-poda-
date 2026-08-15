@@ -1,16 +1,25 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+import { DataTypes } from 'sequelize';
+import sequelize from '../config/database.js';
 
-// Inicializar modelos (todas funciones que retornan sequelize.define)
-const Recorrido = require('./Recorrido')(sequelize, DataTypes);
-const Piquete = require('./Piquete')(sequelize, DataTypes);
-const ItemCatalogo = require('./ItemCatalogo')(sequelize, DataTypes);
-const Anomalia = require('./Anomalia')(sequelize, DataTypes);
-const PodaDetalle = require('./PodaDetalle')(sequelize, DataTypes);
-const Observaciones = require('./Observaciones')(sequelize, DataTypes);
-const AisladorDetalle = require('./AisladorDetalle')(sequelize, DataTypes);
+// Importar funciones de inicialización de cada modelo
+import initRecorrido from './Recorrido.js';
+import initPiquete from './Piquete.js';
+import initItemCatalogo from './ItemCatalogo.js';
+import initAnomalia from './Anomalia.js';
+import initPodaDetalle from './PodaDetalle.js';
+import initObservaciones from './Observaciones.js';
+import initAisladorDetalle from './AisladorDetalle.js';
 
-// Asociaciones (solo aquí)
+// Inicializar modelos
+const Recorrido = initRecorrido(sequelize, DataTypes);
+const Piquete = initPiquete(sequelize, DataTypes);
+const ItemCatalogo = initItemCatalogo(sequelize, DataTypes);
+const Anomalia = initAnomalia(sequelize, DataTypes);
+const PodaDetalle = initPodaDetalle(sequelize, DataTypes);
+const Observaciones = initObservaciones(sequelize, DataTypes);
+const AisladorDetalle = initAisladorDetalle(sequelize, DataTypes);
+
+// Asociaciones
 Recorrido.hasMany(Piquete, { foreignKey: 'recorrido_id' });
 Piquete.belongsTo(Recorrido, { foreignKey: 'recorrido_id' });
 
@@ -35,8 +44,8 @@ Observaciones.belongsTo(Recorrido, { as: 'Recorrido', foreignKey: 'recorrido_id'
 Anomalia.hasMany(AisladorDetalle, { as: 'AisladorDetalle', foreignKey: 'anomalia_id' });
 AisladorDetalle.belongsTo(Anomalia, { as: 'Anomalia', foreignKey: 'anomalia_id' });
 
-// Export
-module.exports = {
+// Exportación compatible con ES Modules (import { Recorrido, ... } from '../models/index.js')
+export {
   sequelize,
   Recorrido,
   Piquete,

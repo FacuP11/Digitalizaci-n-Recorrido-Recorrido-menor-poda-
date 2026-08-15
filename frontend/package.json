@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "axios": "^1.19.0",
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
     "react": "^19.1.1",

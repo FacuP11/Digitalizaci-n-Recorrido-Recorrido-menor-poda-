@@ -1,4 +1,4 @@
-module.exports = (sequelize, DataTypes) => {
+export default (sequelize, DataTypes) => {
   const Anomalia = sequelize.define('Anomalia', {
     recorrido_id: { type: DataTypes.INTEGER, allowNull: false },
     piquete_id:   { type: DataTypes.INTEGER, allowNull: false },

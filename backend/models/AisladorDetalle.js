@@ -1,7 +1,7 @@
 // backend/models/AisladorDetalle.js
-const { DataTypes } = require('sequelize');
+import { DataTypes } from 'sequelize';
 
-module.exports = (sequelize) => {
+export default (sequelize) => {
   const AisladorDetalle = sequelize.define('AisladorDetalle', {
     anomalia_id: {
       type: DataTypes.INTEGER,

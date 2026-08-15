@@ -1,4 +1,4 @@
-module.exports = (sequelize, DataTypes) => {
+export default (sequelize, DataTypes) => {
   const Recorrido = sequelize.define('Recorrido', {
     linea:       { type: DataTypes.STRING, allowNull: false },
     kv:          { type: DataTypes.ENUM('132', '220'), allowNull: false },

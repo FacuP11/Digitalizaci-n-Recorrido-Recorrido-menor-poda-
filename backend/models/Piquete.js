@@ -1,4 +1,4 @@
-module.exports = (sequelize, DataTypes) => {
+export default (sequelize, DataTypes) => {
   const Piquete = sequelize.define('Piquete', {
     recorrido_id: { type: DataTypes.INTEGER, allowNull: false },
     etiqueta:     { type: DataTypes.STRING, allowNull: false }, // 'POR','ANT','1','2','155B', etc.

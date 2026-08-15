@@ -1,14 +1,44 @@
 // backend/routes/piquetes.js
 import express from 'express';
-import { crearPiquete } from '../controllers/piquetesController.js';
+import { Op } from 'sequelize';
 import { validarSchema } from '../middlewares/validarSchema.js';
-import { piqueteSchema } from '../schemas/piqueteSchema.js';
+import { piqueteSchema } from '../schema/piqueteSchema.js';
+import {sequelize, Piquete, Anomalia, ItemCatalogo, PodaDetalle, AisladorDetalle, Observaciones, Recorrido} from '../models/index.js';
+const router = express.Router();
 
-const express = require('express');
-const router = express.Router();
-const { Op } = require('sequelize');
-const { sequelize, Piquete, Anomalia, ItemCatalogo, PodaDetalle, AisladorDetalle, Observaciones, Recorrido } = require('../models');
-const router = express.Router();
+const crearPiquete = async (req, res) => {
+  try {
+    const { recorrido_id, etiqueta, orden, tc_ss, tc_sd, tc_sv, tc_scm, tc_rs, tc_rd, tc_lado, tc_cadenas } = req.body;
+
+    // Si no se envía orden, calculamos el siguiente orden dentro del recorrido
+    let nuevoOrden = orden;
+    if (nuevoOrden === undefined || nuevoOrden === null) {
+      const maxOrden = await Piquete.max('orden', { where: { recorrido_id } });
+      nuevoOrden = (maxOrden || 0) + 1;
+    }
+
+    const nuevoPiquete = await Piquete.create({
+      recorrido_id,
+      etiqueta,
+      orden: nuevoOrden,
+      tc_ss: !!tc_ss,
+      tc_sd: !!tc_sd,
+      tc_sv: !!tc_sv,
+      tc_scm: !!tc_scm,
+      tc_rs: !!tc_rs,
+      tc_rd: !!tc_rd,
+      tc_lado: tc_lado || null,
+      tc_cadenas: tc_cadenas || null,
+      sin_novedad: false
+    });
+
+    return res.status(201).json(nuevoPiquete);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+};
+
+
 
 // La petición pasa por 'validarSchema(piqueteSchema)' ANTES de llegar a 'crearPiquete'
 router.post('/', validarSchema(piqueteSchema), crearPiquete);
@@ -295,4 +325,4 @@ router.post('/:id/observaciones', async (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-module.exports = router;
+export default router;

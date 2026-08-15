@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api.js";
-import { piqueteSchema } from '../schemas/piqueteSchema'; // o definir las reglas locales
 
-// LISTA DE OPCIONES PARA CONDUCTORES
 const OPCIONES_CONDUCTORES = [
-  { code: 'COND_DIST_EDIF',    label: 'Cable a menor dist. linea edif.' },
-  { code: 'COND_ALTURA',       label: 'Cable a menor altura del terreno' },
+  { code: 'COND_DIST_EDIF',   label: 'Cable a menor dist. linea edif.' },
+  { code: 'COND_ALTURA',      label: 'Cable a menor altura del terreno' },
   { code: 'COND_DIST_CARTEL',  label: 'A menor distancia de carteles' },
   { code: 'COND_PROX_INST',    label: 'Cable proximo a otras instalaciones' },
   { code: 'COND_DETERIORADO',  label: 'Cable deteriorado' },
@@ -38,10 +36,10 @@ const OPCIONES_GENERAL = [
 ];
 
 const TODAS_OPCIONES = [
-    ...OPCIONES_CONDUCTORES, 
-    ...OPCIONES_COLUMNA, 
-    ...OPCIONES_TORRE, 
-    ...OPCIONES_GENERAL
+  ...OPCIONES_CONDUCTORES, 
+  ...OPCIONES_COLUMNA, 
+  ...OPCIONES_TORRE, 
+  ...OPCIONES_GENERAL
 ];
 
 export default function PiqueteForm() {
@@ -56,15 +54,11 @@ export default function PiqueteForm() {
   const [p, setP] = useState(null);
   const [err, setErr] = useState("");
   
-  // ==========================================
-  // ESTADOS DE OPTIMIZACIÓN (MEMORIA LOCAL)
-  // ==========================================
   const [anomaliasLocales, setAnomaliasLocales] = useState([]);
   const [pendientesA, setPendientesA] = useState([]); 
   const [pendientesD, setPendientesD] = useState([]); 
   const [guardando, setGuardando] = useState(false);
 
-  // --- ESTADOS DEL FORMULARIO ---
   const [tc, setTc] = useState({
     ss: false, sd: false, sv: false, scm: false, rs: false, rd: false,
     lado: "INICIO", cadenas: "V",
@@ -74,7 +68,13 @@ export default function PiqueteForm() {
   const [balizor, setBalizor] = useState("N");
   const [balizorDetalle, setBalizorDetalle] = useState("");
   const [aislLado, setAislLado] = useState(""); 
-  const [aislInputs, setAislInputs] = useState({ R: { int: "", ext: "" }, S: { int: "", ext: "" }, T: { int: "", ext: "" } });
+  
+  const [aislInputs, setAislInputs] = useState({ 
+    R: { int: "", ext: "", scm: "", cant: "" }, 
+    S: { int: "", ext: "", scm: "", cant: "" }, 
+    T: { int: "", ext: "", scm: "", cant: "" } 
+  });
+
   const [condTipo, setCondTipo] = useState(""); 
   const [condDetalle, setCondDetalle] = useState(""); 
   const [colTipo, setColTipo] = useState(""); 
@@ -88,7 +88,6 @@ export default function PiqueteForm() {
     if (p && p.id) window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [piqueteId, p]);
 
-  // --- HELPERS NAVEGACIÓN ---
   async function listaRecorr(recId) { return api(`/recorridos/${recId}/piquetes`); }
   async function idPorEtiqueta(targetRecId, etiquetaBuscada, piqueteOrigen) {
     const listaDestino = await listaRecorr(targetRecId);
@@ -120,7 +119,6 @@ export default function PiqueteForm() {
     return null;
   }
 
-  // --- CARGA DE DATOS ---
   async function cargar() {
     try {
       setP(null); setErr(""); setGuardando(false);
@@ -170,37 +168,33 @@ export default function PiqueteForm() {
       return;
     }
     if (nextIdThisLine) {
-        nav(`/piquetes/${nextIdThisLine}?order=${order}${partner ? `&partner=${partner}` : ''}`);
-        return;
+      nav(`/piquetes/${nextIdThisLine}?order=${order}${partner ? `&partner=${partner}` : ''}`);
+      return;
     }
     nav(`/recorridos/${p.recorrido_id}/piquetes?order=${order}`);
   }
-
-  // =========================================================
-  // LOGICA LOCAL
-  // =========================================================
 
   function agregarAnomaliaLocal(body, extraUI = {}) {
     const tempId = 'temp-' + Date.now() + Math.random();
     const label = TODAS_OPCIONES.find(op => op.code === body.item_codigo)?.label || body.item_codigo;
 
     setAnomaliasLocales(prev => [...prev, {
-        id: tempId,
-        ItemCatalogo: { codigo: body.item_codigo, descripcion: label },
-        valor_texto: body.valor_texto,
-        ...extraUI
+      id: tempId,
+      ItemCatalogo: { codigo: body.item_codigo, descripcion: label },
+      valor_texto: body.valor_texto,
+      ...extraUI
     }]);
     setPendientesA(prev => [...prev, { tempId, body }]);
   }
 
   function borrarAnomalia(anomaliaId) {
-    if(!window.confirm("¿Borrar?")) return;
+    if (!window.confirm("¿Borrar esta anomalía?")) return;
     
     setAnomaliasLocales(prev => prev.filter(a => a.id !== anomaliaId));
     if (String(anomaliaId).startsWith('temp-')) {
-        setPendientesA(prev => prev.filter(p => p.tempId !== anomaliaId));
+      setPendientesA(prev => prev.filter(p => p.tempId !== anomaliaId));
     } else {
-        setPendientesD(prev => [...prev, anomaliaId]);
+      setPendientesD(prev => [...prev, anomaliaId]);
     }
   }
 
@@ -214,20 +208,64 @@ export default function PiqueteForm() {
     setBalizorDetalle("");
   }
 
+  // Lógica técnica de Aisladores
   function agregarAislador(tipo, fase) { 
-    if (!aislLado) { setErr("Selecciona el Lado primero."); return; }
+    const esRetencion = tc.rs || tc.rd;
+    
+    // Solo exigimos lado si es una retención (RS o RD)
+    if (esRetencion && !aislLado) { 
+      setErr("Selecciona el Lado de la retención primero (Subestación A o B)."); 
+      return; 
+    }
+    setErr("");
+
     const vals = aislInputs[fase];
-    if (!vals.int && !vals.ext) return; 
+    const cantInt = Number(vals.int || vals.cant) || 0;
+    const cantExt = Number(vals.ext) || 0;
+    const cantScm = Number(vals.scm) || 0;
+
+    if (cantInt === 0 && cantExt === 0 && cantScm === 0) return;
+
+    const partesRoturas = [];
+    if (cantInt > 0) partesRoturas.push(`Int: ${cantInt}`);
+    if (cantExt > 0) partesRoturas.push(`Ext: ${cantExt}`);
+    if (cantScm > 0) partesRoturas.push(`SCM: ${cantScm}`);
+
+    const ladoTexto = esRetencion ? ` (Lado ${aislLado})` : '';
+    const detalleTexto = `Fase ${fase} | ${partesRoturas.join(' / ')}${ladoTexto}`;
 
     agregarAnomaliaLocal(
-        { item_codigo: `AISL_${tipo}`, aislador: { fase, cantidad_interior: vals.int, cantidad_exterior: vals.ext, lado_referencia: aislLado } },
-        { AisladorDetalle: [{ fase, cantidad_interior: vals.int, cantidad_exterior: vals.ext, lado_referencia: aislLado }] }
+      { 
+        item_codigo: `AISL_${tipo}`, 
+        valor_texto: detalleTexto,
+        aislador: { 
+          fase, 
+          cantidad_interior: cantInt, 
+          cantidad_exterior: cantExt, 
+          cantidad_scm: cantScm,
+          lado_referencia: esRetencion ? aislLado : (aislLado || "N/A") 
+        } 
+      },
+      { 
+        AisladorDetalle: [{ 
+          fase, 
+          cantidad_interior: cantInt, 
+          cantidad_exterior: cantExt, 
+          cantidad_scm: cantScm,
+          lado_referencia: esRetencion ? aislLado : (aislLado || "N/A") 
+        }] 
+      }
     );
-    setAislInputs(prev => ({ ...prev, [fase]: { int: "", ext: "" } }));
+
+    setAislInputs(prev => ({ 
+      ...prev, 
+      [fase]: { int: "", ext: "", scm: "", cant: "" } 
+    }));
   }
 
   function handleAislInputChange(fase, campo, val) {
-      setAislInputs(prev => ({ ...prev, [fase]: { ...prev[fase], [campo]: val } }));
+    const valLimpio = val === '' ? '' : Math.max(0, parseInt(val, 10) || 0);
+    setAislInputs(prev => ({ ...prev, [fase]: { ...prev[fase], [campo]: valLimpio } }));
   }
 
   function agregarGenerico(codigo, detalle, setCodigo, setDetalle) {
@@ -236,46 +274,26 @@ export default function PiqueteForm() {
     setCodigo(""); setDetalle("");
   }
 
-  function handleSubmit(e) {
-  e.preventDefault();
-
-  // Validar el estado del formulario antes de guardar u offline
-  const resultado = piqueteSchema.safeParse(formData);
-
-  if (!resultado.success) {
-    // Extraemos el primer error para mostrarlo en pantalla
-    const primerError = resultado.error.issues[0].message;
-    setMensajeError(primerError);
-    return;
-  }
-
-  // Si pasa la validación, procedemos a guardar (online u offline)
-  guardarPiquete(resultado.data);
-}
-
   const agregarConductor = () => agregarGenerico(condTipo, condDetalle, setCondTipo, setCondDetalle);
   const agregarColumna = () => agregarGenerico(colTipo, colDetalle, setColTipo, setColDetalle);
   const agregarTorre = () => agregarGenerico(torreTipo, torreDetalle, setTorreTipo, setTorreDetalle);
   const agregarGeneral = () => agregarGenerico(genTipo, genDetalle, setGenTipo, setGenDetalle);
 
-  // =========================================================
-  // GUARDADO EN LOTE
-  // =========================================================
   async function guardarTodoYContinuar() {
-      setGuardando(true);
-      try {
-          await api(`/piquetes/${piqueteId}/tipo-cadena`, {
-              method: "POST",
-              body: { tc_ss: tc.ss, tc_sd: tc.sd, tc_sv: tc.sv, tc_scm: tc.scm, tc_rs: tc.rs, tc_rd: tc.rd, tc_lado: tc.lado, tc_cadenas: tc.cadenas }
-          });
-          for(const id of pendientesD) await api(`/piquetes/${piqueteId}/anomalias/${id}`, { method: "DELETE" });
-          for(const item of pendientesA) await api(`/piquetes/${piqueteId}/anomalias`, { method: "POST", body: item.body });
+    setGuardando(true);
+    try {
+      await api(`/piquetes/${piqueteId}/tipo-cadena`, {
+        method: "POST",
+        body: { tc_ss: tc.ss, tc_sd: tc.sd, tc_sv: tc.sv, tc_scm: tc.scm, tc_rs: tc.rs, tc_rd: tc.rd, tc_lado: tc.lado, tc_cadenas: tc.cadenas }
+      });
+      for (const id of pendientesD) await api(`/piquetes/${piqueteId}/anomalias/${id}`, { method: "DELETE" });
+      for (const item of pendientesA) await api(`/piquetes/${piqueteId}/anomalias`, { method: "POST", body: item.body });
 
-          await irAlSiguienteFlujo();
-      } catch (e) {
-          setErr("Error al guardar: " + e.message);
-          setGuardando(false);
-      }
+      await irAlSiguienteFlujo();
+    } catch (e) {
+      setErr("Error al guardar: " + e.message);
+      setGuardando(false);
+    }
   }
 
   async function marcarSinNovedad() {
@@ -293,301 +311,399 @@ export default function PiqueteForm() {
     }
   }
 
-  if (!p) return <div className="max-w-md mx-auto p-4">Cargando...</div>;
+  if (!p) return <div className="max-w-md mx-auto p-6 text-center font-black text-slate-800 dark:text-slate-100">Cargando datos del piquete...</div>;
 
-  // -------------------------------------------------------------
-  // 🔥 VARIABLE MÁGICA DE PROTECCIÓN (SOLO LECTURA)
-  // -------------------------------------------------------------
-  const estaFinalizado = p?.Recorrido?.estado?.toUpperCase() === "FINALIZADO";
+  const estaFinalizado = p?.Recorrido?.estado?.toUpperCase() === "FINALIZADO" || p?.Recorrido?.estado?.toUpperCase() === "COMPLETO";
+  
+  // Determinaciones técnicas
+  const esCadenaDoble = tc.sd || tc.rd || tc.sv;
+  const esRetencion = tc.rs || tc.rd; // <-- Solo RD y RS son Retención
 
   return (
-    <div className="max-w-md mx-auto p-4 space-y-4 pb-24">
+    <div className="max-w-md md:max-w-2xl mx-auto p-4 md:p-6 space-y-5 pb-28 bg-slate-50 dark:bg-slate-950 min-h-screen text-slate-900 dark:text-slate-100">
       
       {/* HEADER DE NAVEGACIÓN */}
-      <div className="flex justify-between items-start">
-          <button className="text-blue-700 underline" onClick={() => nav(`/recorridos/${p.recorrido_id}/piquetes?order=${order}`)}>← Volver</button>
-          {p.Recorrido && (
-             <div className="text-right">
-                <div className="text-xs text-gray-500 uppercase font-bold">Línea</div>
-                <div className="text-lg font-bold text-blue-900">{p.Recorrido.linea}</div>
-             </div>
-          )}
+      <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-3 rounded-2xl border-2 border-slate-200 dark:border-slate-800 shadow-sm">
+        <button 
+          onClick={() => nav(`/recorridos/${p.recorrido_id}/piquetes?order=${order}`)}
+          className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-extrabold text-xs uppercase tracking-wide transition-all shadow-sm active:scale-95"
+        >
+          ← Volver
+        </button>
+        {p.Recorrido && (
+          <div className="text-right">
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-black tracking-widest">Línea</div>
+            <div className="text-base font-black text-blue-700 dark:text-blue-400 truncate max-w-[180px]">{p.Recorrido.linea}</div>
+          </div>
+        )}
       </div>
 
-      <h1 className="text-2xl font-bold text-center">Piquete {p.etiqueta}</h1>
-      {err && <div className="bg-red-100 text-red-800 p-2 rounded text-center text-sm font-bold">{err}</div>}
+      <div className="text-center py-1">
+        <span className="text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-800 px-3 py-1 rounded-full">
+          Inspección Técnica
+        </span>
+        <h1 className="text-3xl font-black text-slate-900 dark:text-white mt-1">Piquete {p.etiqueta}</h1>
+      </div>
 
-      {/* 🚀 CARTEL AVISO: MODO SOLO LECTURA */}
+      {err && <div className="bg-red-500 text-white p-3 rounded-xl text-center text-sm font-extrabold shadow-md border-2 border-red-700">{err}</div>}
+
+      {/* AVISO: MODO SOLO LECTURA */}
       {estaFinalizado && (
-          <div className="bg-orange-100 border-l-4 border-orange-500 text-orange-800 p-3 rounded shadow-sm">
-              <p className="font-extrabold text-sm flex items-center gap-2">
-                  <span>🔒</span> RECORRIDO FINALIZADO
-              </p>
-              <p className="text-xs font-bold mt-1 text-orange-700">Modo de solo lectura. No se pueden modificar los datos.</p>
-          </div>
+        <div className="bg-amber-500 text-slate-950 p-3.5 rounded-2xl shadow-md border-2 border-amber-600 font-black text-xs flex items-center gap-2">
+          <span className="text-lg">🔒</span>
+          <span>RECORRIDO FINALIZADO — Modo solo lectura activado.</span>
+        </div>
       )}
 
       {/* 1. TIPO DE CADENA */}
-      <div className="border-2 border-gray-300 rounded-xl p-3 bg-white shadow-sm space-y-3">
-        <div className="flex justify-between items-center border-b-2 border-gray-200 pb-1">
-            <span className="font-extrabold text-gray-900 text-sm uppercase tracking-wide">Tipo de cadena</span>
-            {!estaFinalizado && <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold">Se guarda al avanzar</span>}
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-            {['ss','sd','sv','scm','rs','rd'].map(tipo => {
-                const activo = tc[tipo];
-                return (
-                    <label 
-                        key={tipo} 
-                        className={`flex items-center justify-center py-3 border-2 rounded-lg font-extrabold text-sm uppercase transition-all ${
-                            activo ? 'bg-blue-700 border-blue-900 text-white shadow-inner scale-95' : 'bg-gray-50 border-gray-400 text-gray-700 shadow-sm'
-                        } ${estaFinalizado ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-                    >
-                        <input type="checkbox" className="hidden" disabled={estaFinalizado} checked={activo} onChange={(e) => setTc({...tc, [tipo]: e.target.checked})} />
-                        {tipo}
-                    </label>
-                );
-            })}
-        </div>
-        <div className="flex gap-2 mt-2">
-          <select disabled={estaFinalizado} className="border p-2 rounded bg-white w-1/2 text-sm font-bold text-gray-700 disabled:bg-gray-100 disabled:text-gray-400" value={tc.lado} onChange={(e) => setTc((t) => ({ ...t, lado: e.target.value }))}>
-            <option>INICIO</option><option>FIN</option>
-          </select>
-          <select disabled={estaFinalizado} className="border p-2 rounded bg-white w-1/2 text-sm font-bold text-gray-700 disabled:bg-gray-100 disabled:text-gray-400" value={tc.cadenas} onChange={(e) => setTc((t) => ({ ...t, cadenas: e.target.value }))}>
-            <option>V</option><option>P</option><option>C</option><option>LP</option><option>M</option>
-          </select>
-        </div>
-        <div className="pt-2">
-             <button onClick={marcarSinNovedad} disabled={guardando || estaFinalizado} className="w-full py-3 rounded border-2 border-emerald-500 text-emerald-700 font-bold hover:bg-emerald-50 text-sm uppercase tracking-wide disabled:opacity-40 disabled:bg-gray-100 disabled:border-gray-300 disabled:text-gray-400">
-                {guardando ? "⏳ PROCESANDO..." : "SIN NOVEDAD"}
-             </button>
-        </div>
-      </div>
-
-     {/* 2. AISLADORES  */}
-      <div className="border-2 border-gray-300 rounded-xl p-3 bg-white shadow-sm space-y-3 mt-4">
-        <div className="flex items-center justify-between border-b-2 border-gray-200 pb-2">
-            <div className="flex items-center gap-2 font-extrabold text-gray-900 text-sm uppercase tracking-wide">
-                <span className="text-xl">💿</span> Aisladores 
-            </div>
+      <div className="card-base space-y-4">
+        <div className="flex justify-between items-center border-b-2 border-slate-100 dark:border-slate-800 pb-2">
+          <span className="font-black text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider flex items-center gap-1.5">
+            <span>⛓️</span> Tipo de cadena
+          </span>
+          {!estaFinalizado && <span className="text-[10px] bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 px-2.5 py-1 rounded-md font-extrabold border border-blue-200 dark:border-blue-800">Auto-guarda</span>}
         </div>
         
-        {p.Recorrido && (
-            <div className="mb-4 mt-2">
-                <label className="text-[10px] font-extrabold text-gray-500 uppercase mb-1 block ml-1">Seleccione el Lado a registrar:</label>
-                <div className="flex bg-gray-200 p-1.5 rounded-xl border-2 border-gray-300 shadow-inner">
-                    {[p.Recorrido.entre_desde, p.Recorrido.entre_hasta].map(lado => {
-                        const isSelected = aislLado === lado;
-                        return (
-                            <button 
-                                key={lado}
-                                disabled={estaFinalizado}
-                                onClick={(e) => { e.preventDefault(); setAislLado(lado); }}
-                                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-xs font-extrabold uppercase transition-all duration-200 ${isSelected ? 'bg-blue-700 text-white shadow-md border-2 border-blue-900' : 'text-gray-600 hover:bg-gray-300 border-2 border-transparent'} disabled:opacity-50`}
-                            >
-                                {isSelected ? <span className="bg-white text-blue-800 rounded-full w-4 h-4 flex items-center justify-center text-[10px]">✓</span> : <span className="w-4 h-4"></span>}
-                                Lado {lado}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-        )}
+        <div className="grid grid-cols-3 gap-2.5">
+          {['ss','sd','sv','scm','rs','rd'].map(tipo => {
+            const activo = tc[tipo];
+            return (
+              <label 
+                key={tipo} 
+                className={`flex items-center justify-center min-h-[46px] rounded-xl font-black text-sm uppercase transition-all duration-150 border-2 select-none ${
+                  activo 
+                    ? 'bg-blue-600 border-blue-700 text-white shadow-md scale-[0.98]' 
+                    : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                } ${estaFinalizado ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer active:scale-95'}`}
+              >
+                <input type="checkbox" className="hidden" disabled={estaFinalizado} checked={activo} onChange={(e) => setTc({...tc, [tipo]: e.target.checked})} />
+                {tipo}
+              </label>
+            );
+          })}
+        </div>
 
-        <div className="space-y-3">
-            {['R', 'S', 'T'].map(fase => {
-                const esDoble = tc.sd || tc.rd || tc.sv;
-                return (
-                <div key={fase} className="flex items-center gap-2 bg-gray-50 p-2 rounded-xl border-2 border-gray-300">
-                    <div className="font-black text-2xl w-8 text-center text-gray-800">{fase}</div>
-                    {esDoble && (
-                        <>
-                            <div className="flex flex-col flex-1">
-                                <span className="text-[10px] font-extrabold text-gray-500 text-center uppercase mb-1">Int</span>
-                                <input type="number" disabled={estaFinalizado} placeholder="-" className="w-full border-2 border-gray-400 rounded-lg p-2 text-center font-bold bg-white focus:border-blue-600 outline-none disabled:bg-gray-200" value={aislInputs[fase].int} onChange={(e) => handleAislInputChange(fase, 'int', e.target.value)} />
-                            </div>
-                            <div className="flex flex-col flex-1">
-                                <span className="text-[10px] font-extrabold text-gray-500 text-center uppercase mb-1">Ext</span>
-                                <input type="number" disabled={estaFinalizado} placeholder="-" className="w-full border-2 border-gray-400 rounded-lg p-2 text-center font-bold bg-white focus:border-blue-600 outline-none disabled:bg-gray-200" value={aislInputs[fase].ext} onChange={(e) => handleAislInputChange(fase, 'ext', e.target.value)} />
-                            </div>
-                        </>
-                    )}
-                    {!esDoble && (
-                        <div className="flex flex-col flex-1">
-                            <span className="text-[10px] font-extrabold text-gray-500 text-center uppercase mb-1">Cantidad</span>
-                            <input type="number" disabled={estaFinalizado} placeholder="-" className="w-full border-2 border-gray-400 rounded-lg p-2 text-center font-bold bg-white focus:border-blue-600 outline-none disabled:bg-gray-200" value={aislInputs[fase].int} onChange={(e) => handleAislInputChange(fase, 'int', e.target.value)} />
-                        </div>
-                    )}
-                    <div className="flex flex-col gap-1 w-16">
-                         <button disabled={(!aislInputs[fase].int && !aislInputs[fase].ext) || estaFinalizado} onClick={(e) => { e.preventDefault(); agregarAislador('ROTO', fase); }} className="bg-red-600 text-white border-2 border-red-800 py-1.5 px-1 rounded-lg text-[10px] font-extrabold uppercase disabled:opacity-40 active:scale-95">+ Roto</button>
-                         <button disabled={(!aislInputs[fase].int && !aislInputs[fase].ext) || estaFinalizado} onClick={(e) => { e.preventDefault(); agregarAislador('CACHADO', fase); }} className="bg-orange-500 text-white border-2 border-orange-700 py-1.5 px-1 rounded-lg text-[10px] font-extrabold uppercase disabled:opacity-40 active:scale-95">+ Cach</button>
-                    </div>
-                </div>
-                );
-            })}
+        <div className="grid grid-cols-2 gap-2.5 pt-1">
+          {/* Lado en tipo de cadena: solo si es retención */}
+          <div className="flex flex-col">
+            <span className="label-title">Lado Piquete</span>
+            <select disabled={estaFinalizado || !esRetencion} className="input-field disabled:opacity-50" value={tc.lado} onChange={(e) => setTc((t) => ({ ...t, lado: e.target.value }))}>
+              <option>INICIO</option><option>FIN</option>
+            </select>
+          </div>
+          <div className="flex flex-col">
+            <span className="label-title">Configuración</span>
+            <select disabled={estaFinalizado} className="input-field disabled:opacity-50" value={tc.cadenas} onChange={(e) => setTc((t) => ({ ...t, cadenas: e.target.value }))}>
+              <option>V</option><option>P</option><option>C</option><option>LP</option><option>M</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="pt-2">
+          <button 
+            onClick={marcarSinNovedad} 
+            disabled={guardando || estaFinalizado} 
+            className="btn-success w-full"
+          >
+            {guardando ? "⏳ PROCESANDO..." : "✔ MARCAR SIN NOVEDAD"}
+          </button>
         </div>
       </div>
 
-     {/* 3. CONDUCTORES */}
-      <div className="border-2 border-gray-300 rounded-xl p-3 bg-white shadow-sm space-y-3 mt-4">
-        <div className="flex items-center gap-2 font-extrabold text-gray-900 text-sm uppercase tracking-wide border-b-2 border-gray-200 pb-2">
-           <span className="text-xl">⚡</span> Conductores
+      {/* 2. AISLADORES */}
+      <div className="card-base space-y-4">
+        <div className="flex items-center justify-between border-b-2 border-slate-100 dark:border-slate-800 pb-2">
+          <div className="flex items-center gap-2 font-black text-slate-900 dark:text-white text-xs uppercase tracking-wider">
+            <span className="text-base">💿</span> Aisladores
+            {tc.scm && <span className="text-[10px] bg-purple-600 text-white px-2 py-0.5 rounded-md font-black shadow-sm">+ SCM Activo</span>}
+            {esRetencion && <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-md font-black shadow-sm">Retención (RS/RD)</span>}
+          </div>
+        </div>
+        
+        {/* SELECTOR DE LADO: Solo aparece si está marcado RD o RS */}
+        {esRetencion && p.Recorrido && (
+          <div className="space-y-1 animate-fade-in">
+            <label className="label-title text-blue-700 dark:text-blue-400">
+              Lado de la Retención (Subestación A o B):
+            </label>
+            <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-xl border border-slate-300 dark:border-slate-700">
+              {[p.Recorrido.entre_desde, p.Recorrido.entre_hasta].map(lado => {
+                const isSelected = aislLado === lado;
+                return (
+                  <button 
+                    key={lado}
+                    disabled={estaFinalizado}
+                    onClick={(e) => { e.preventDefault(); setAislLado(lado); }}
+                    className={`flex-1 min-h-[42px] flex items-center justify-center gap-1.5 rounded-lg text-xs font-black uppercase transition-all ${
+                      isSelected 
+                        ? 'bg-blue-600 text-white shadow-md' 
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'
+                    } disabled:opacity-50 active:scale-95`}
+                  >
+                    {isSelected && <span className="text-xs">✓</span>}
+                    Lado {lado}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-3 pt-1">
+          {['R', 'S', 'T'].map(fase => {
+            const tieneDatos = !!aislInputs[fase].int || !!aislInputs[fase].ext || !!aislInputs[fase].scm || !!aislInputs[fase].cant;
+
+            return (
+              <div key={fase} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 p-2.5 rounded-xl border border-slate-300 dark:border-slate-700">
+                <div className="font-black text-2xl w-8 text-center text-slate-800 dark:text-slate-100">{fase}</div>
+                
+                {/* CADENAS PRINCIPALES DOBLES (SD, SV, RD) */}
+                {esCadenaDoble && (
+                  <>
+                    <div className="flex flex-col flex-1">
+                      <span className="text-[9px] font-black text-slate-500 dark:text-slate-400 text-center uppercase mb-0.5">Int</span>
+                      <input 
+                        type="number" 
+                        min="0"
+                        disabled={estaFinalizado} 
+                        placeholder="-" 
+                        className="w-full border-2 border-slate-300 dark:border-slate-600 rounded-lg p-2 text-center font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 focus:border-blue-600 outline-none disabled:bg-slate-200 text-base" 
+                        value={aislInputs[fase].int} 
+                        onChange={(e) => handleAislInputChange(fase, 'int', e.target.value)} 
+                      />
+                    </div>
+                    <div className="flex flex-col flex-1">
+                      <span className="text-[9px] font-black text-slate-500 dark:text-slate-400 text-center uppercase mb-0.5">Ext</span>
+                      <input 
+                        type="number" 
+                        min="0"
+                        disabled={estaFinalizado} 
+                        placeholder="-" 
+                        className="w-full border-2 border-slate-300 dark:border-slate-600 rounded-lg p-2 text-center font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 focus:border-blue-600 outline-none disabled:bg-slate-200 text-base" 
+                        value={aislInputs[fase].ext} 
+                        onChange={(e) => handleAislInputChange(fase, 'ext', e.target.value)} 
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* CADENA SIMPLE (SS, RS o no doble) */}
+                {!esCadenaDoble && (
+                  <div className="flex flex-col flex-1">
+                    <span className="text-[9px] font-black text-slate-500 dark:text-slate-400 text-center uppercase mb-0.5">Ppal</span>
+                    <input 
+                      type="number" 
+                      min="0"
+                      disabled={estaFinalizado} 
+                      placeholder="-" 
+                      className="w-full border-2 border-slate-300 dark:border-slate-600 rounded-lg p-2 text-center font-black text-slate-900 dark:text-white bg-white dark:bg-slate-900 focus:border-blue-600 outline-none disabled:bg-slate-200 text-base" 
+                      value={aislInputs[fase].cant} 
+                      onChange={(e) => handleAislInputChange(fase, 'cant', e.target.value)} 
+                    />
+                  </div>
+                )}
+
+                {/* SCM (CUELLO MUERTO) */}
+                {tc.scm && (
+                  <div className="flex flex-col flex-1 bg-purple-100 dark:bg-purple-950/60 p-1 rounded-lg border-2 border-purple-400 dark:border-purple-600">
+                    <span className="text-[9px] font-black text-purple-900 dark:text-purple-300 text-center uppercase mb-0.5">SCM</span>
+                    <input 
+                      type="number" 
+                      min="0"
+                      disabled={estaFinalizado} 
+                      placeholder="-" 
+                      className="w-full border-2 border-purple-500 rounded-md p-1.5 text-center font-black text-purple-950 dark:text-purple-100 bg-white dark:bg-slate-900 focus:border-purple-700 outline-none disabled:bg-slate-200 text-base" 
+                      value={aislInputs[fase].scm} 
+                      onChange={(e) => handleAislInputChange(fase, 'scm', e.target.value)} 
+                    />
+                  </div>
+                )}
+
+                {/* BOTONES ROTO / CACH */}
+                <div className="flex flex-col gap-1.5 w-20">
+                  <button 
+                    disabled={!tieneDatos || estaFinalizado} 
+                    onClick={(e) => { e.preventDefault(); agregarAislador('ROTO', fase); }} 
+                    className="btn-danger !min-h-[32px] !text-xs !py-1 !px-1.5"
+                  >
+                    + Roto
+                  </button>
+                  <button 
+                    disabled={!tieneDatos || estaFinalizado} 
+                    onClick={(e) => { e.preventDefault(); agregarAislador('CACHADO', fase); }} 
+                    className="btn-warning !min-h-[32px] !text-xs !py-1 !px-1.5"
+                  >
+                    + Cach
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 3. CONDUCTORES */}
+      <div className="card-base space-y-3">
+        <div className="flex items-center gap-2 font-black text-slate-900 dark:text-white text-xs uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-800 pb-2">
+          <span>⚡</span> Conductores
         </div>
         <div className="space-y-3">
-            <div className="flex flex-col">
-                <label className="text-[10px] font-extrabold text-gray-500 uppercase mb-1 ml-1">Tipo de Anomalía</label>
-                <select disabled={estaFinalizado} className="w-full border-2 border-gray-400 p-3 rounded-lg bg-gray-50 font-bold outline-none disabled:bg-gray-200" value={condTipo} onChange={(e) => setCondTipo(e.target.value)}>
-                    <option value="" className="text-gray-500 font-normal">-- SELECCIONAR ANOMALÍA --</option>
-                    {OPCIONES_CONDUCTORES.map(op => <option key={op.code} value={op.code}>{op.label}</option> )}
-                </select>
-            </div>
-            <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-extrabold text-gray-500 uppercase ml-1">Detalle (Opcional)</label>
-                <div className="flex gap-2">
-                    <input disabled={estaFinalizado} className="border-2 border-gray-400 p-3 rounded-lg flex-1 bg-gray-50 font-bold outline-none disabled:bg-gray-200" placeholder="Ej: Cable deshilachado..." value={condDetalle} onChange={(e) => setCondDetalle(e.target.value)} />
-                    <button onClick={(e) => { e.preventDefault(); agregarConductor(); }} className="bg-blue-700 text-white px-5 rounded-lg font-extrabold text-sm uppercase active:scale-95 disabled:opacity-40" disabled={!condTipo || estaFinalizado}>Agregar</button>
-                </div>
-            </div>
+          <select disabled={estaFinalizado} className="input-field" value={condTipo} onChange={(e) => setCondTipo(e.target.value)}>
+            <option value="" className="text-slate-400">-- SELECCIONAR ANOMALÍA --</option>
+            {OPCIONES_CONDUCTORES.map(op => <option key={op.code} value={op.code}>{op.label}</option>)}
+          </select>
+          <div className="flex gap-2">
+            <input disabled={estaFinalizado} className="input-field flex-1" placeholder="Detalles..." value={condDetalle} onChange={(e) => setCondDetalle(e.target.value)} />
+            <button onClick={(e) => { e.preventDefault(); agregarConductor(); }} className="btn-primary !min-h-[44px] !text-xs" disabled={!condTipo || estaFinalizado}>
+              Agregar
+            </button>
+          </div>
         </div>
       </div>
 
       {/* 4. PODA */}
-      <div className="border-2 border-gray-300 rounded-xl p-3 bg-white shadow-sm space-y-3 mt-4">
-        <div className="flex items-center gap-2 font-extrabold text-gray-900 text-sm uppercase tracking-wide border-b-2 border-gray-200 pb-2">
-           <span className="text-xl">🌳</span> Poda / Árboles
+      <div className="card-base space-y-3">
+        <div className="flex items-center gap-2 font-black text-slate-900 dark:text-white text-xs uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-800 pb-2">
+          <span>🌳</span> Poda / Árboles
         </div>
-        <div className="grid grid-cols-3 gap-2 text-sm">
-            <div className="flex flex-col">
-                <label className="text-[10px] font-extrabold text-gray-500 uppercase mb-1 ml-1">Urgencia</label>
-                <select disabled={estaFinalizado} className="border-2 border-gray-400 p-3 rounded-lg font-bold outline-none disabled:bg-gray-200" value={poda.urgencia} onChange={(e) => setPoda((s) => ({ ...s, urgencia: e.target.value }))}>
-                    <option value="s/p">S/P</option><option value="c/p">C/P</option><option value="U">Urgente</option><option value="I">Inmediata</option>
-                </select>
-            </div>
-            <div className="flex flex-col">
-                <label className="text-[10px] font-extrabold text-gray-500 uppercase mb-1 ml-1">Medio</label>
-                <select disabled={estaFinalizado} className="border-2 border-gray-400 p-3 rounded-lg font-bold outline-none disabled:bg-gray-200" value={poda.medio} onChange={(e) => setPoda((s) => ({ ...s, medio: e.target.value }))}>
-                    <option value="c/e">C/E</option><option value="c/h">C/H</option><option value="f/s">F/S</option>
-                </select>
-            </div>
-            <div className="flex flex-col">
-                <label className="text-[10px] font-extrabold text-gray-500 uppercase mb-1 ml-1">Cantidad</label>
-                <input disabled={estaFinalizado} className="border-2 border-gray-400 p-3 rounded-lg text-center font-bold outline-none disabled:bg-gray-200" type="number" placeholder="Ej: 3" value={poda.cantidad_arboles} onChange={(e) => setPoda((s) => ({ ...s, cantidad_arboles: Number(e.target.value) }))} />
-            </div>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="flex flex-col">
+            <label className="label-title">Urgencia</label>
+            <select disabled={estaFinalizado} className="input-field !p-2.5 !text-xs" value={poda.urgencia} onChange={(e) => setPoda((s) => ({ ...s, urgencia: e.target.value }))}>
+              <option value="s/p">S/P (Sin plazo)</option>
+              <option value="c/p">C/P (Corto plazo)</option>
+              <option value="U">Urgente</option>
+              <option value="I">Inmediata</option>
+            </select>
+          </div>
+          <div className="flex flex-col">
+            <label className="label-title">Medio</label>
+            <select disabled={estaFinalizado} className="input-field !p-2.5 !text-xs" value={poda.medio} onChange={(e) => setPoda((s) => ({ ...s, medio: e.target.value }))}>
+              <option value="c/e">C/E (Hidro)</option>
+              <option value="c/h">C/H (Trepa)</option>
+              <option value="f/s">F/S (L. viva)</option>
+            </select>
+          </div>
+          <div className="flex flex-col">
+            <label className="label-title">Árboles</label>
+            <input disabled={estaFinalizado} min="0" className="input-field !p-2.5 !text-center text-sm" type="number" placeholder="0" value={poda.cantidad_arboles} onChange={(e) => setPoda((s) => ({ ...s, cantidad_arboles: Math.max(0, parseInt(e.target.value, 10) || 0) }))} />
+          </div>
         </div>
-        <div className="flex flex-col gap-1 mt-2">
-            <label className="text-[10px] font-extrabold text-gray-500 uppercase ml-1">Detalle / Especie</label>
-            <div className="flex gap-2">
-                <input disabled={estaFinalizado} className="border-2 border-gray-400 p-3 rounded-lg flex-1 font-bold outline-none disabled:bg-gray-200" placeholder="Ej: Eucaliptos..." value={podaDetalle} onChange={(e) => setPodaDetalle(e.target.value)} />
-                <button disabled={estaFinalizado} onClick={(e) => { e.preventDefault(); agregarPoda(); }} className="bg-blue-700 text-white px-5 rounded-lg font-extrabold text-sm uppercase active:scale-95 disabled:opacity-40">Agregar</button>
-            </div>
+        <div className="flex gap-2 pt-1">
+          <input disabled={estaFinalizado} className="input-field flex-1" placeholder="Especie / Observación..." value={podaDetalle} onChange={(e) => setPodaDetalle(e.target.value)} />
+          <button disabled={estaFinalizado} onClick={(e) => { e.preventDefault(); agregarPoda(); }} className="btn-primary !min-h-[44px] !text-xs">
+            Agregar
+          </button>
         </div>
       </div>
 
       {/* 5. BALIZOR */}
-      <div className="border-2 border-gray-300 rounded-xl p-3 bg-white shadow-sm space-y-3 mt-4">
-        <div className="flex items-center gap-2 font-extrabold text-gray-900 text-sm uppercase tracking-wide border-b-2 border-gray-200 pb-2">
-           <span className="text-xl">🏮</span> Balizor
+      <div className="card-base space-y-3">
+        <div className="flex items-center gap-2 font-black text-slate-900 dark:text-white text-xs uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-800 pb-2">
+          <span>🏮</span> Balizor
         </div>
         <div className="space-y-3">
-            <div className="flex flex-col">
-                <label className="text-[10px] font-extrabold text-gray-500 uppercase mb-1 ml-1">Tipo de Balizor</label>
-                <select disabled={estaFinalizado} className="w-full border-2 border-gray-400 p-3 rounded-lg font-bold outline-none disabled:bg-gray-200" value={balizor} onChange={(e) => setBalizor(e.target.value)}>
-                    <option value="N">Nocturno</option><option value="D">Diurno</option>
-                </select>
-            </div>
-            <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-extrabold text-gray-500 uppercase ml-1">Detalle</label>
-                <div className="flex gap-2">
-                    <input disabled={estaFinalizado} className="border-2 border-gray-400 p-3 rounded-lg flex-1 font-bold outline-none disabled:bg-gray-200" placeholder="Ej: Roto o Desprendido..." value={balizorDetalle} onChange={(e) => setBalizorDetalle(e.target.value)} />
-                    <button disabled={estaFinalizado} onClick={(e) => { e.preventDefault(); agregarBalizor(); }} className="bg-blue-700 text-white px-5 rounded-lg font-extrabold text-sm uppercase active:scale-95 disabled:opacity-40">Agregar</button>
-                </div>
-            </div>
+          <select disabled={estaFinalizado} className="input-field" value={balizor} onChange={(e) => setBalizor(e.target.value)}>
+            <option value="N">Nocturno</option>
+            <option value="D">Diurno</option>
+          </select>
+          <div className="flex gap-2">
+            <input disabled={estaFinalizado} className="input-field flex-1" placeholder="Detalles de balizor..." value={balizorDetalle} onChange={(e) => setBalizorDetalle(e.target.value)} />
+            <button disabled={estaFinalizado} onClick={(e) => { e.preventDefault(); agregarBalizor(); }} className="btn-primary !min-h-[44px] !text-xs">
+              Agregar
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* 6. COLUMNA, 7. TORRE, 8. GENERAL */}
-      {/* (Para no hacer el bloque enorme, los unimos lógicamente de la misma forma) */}
+      {/* 6. COLUMNA, TORRE, GENERAL */}
       {[
-        { titulo: '🗼 Columna', tipo: colTipo, setTipo: setColTipo, detalle: colDetalle, setDetalle: setColDetalle, func: agregarColumna, opciones: OPCIONES_COLUMNA },
+        { titulo: '🗼 Columna', tipo: colTipo, setTipo: setColTipo, detalle: colDetalle, setDetalle: setColDetalle, func: agregarConductor, opciones: OPCIONES_COLUMNA },
         { titulo: '🏗️ Torre', tipo: torreTipo, setTipo: setTorreTipo, detalle: torreDetalle, setDetalle: setTorreDetalle, func: agregarTorre, opciones: OPCIONES_TORRE },
         { titulo: '📋 General / Otros', tipo: genTipo, setTipo: setGenTipo, detalle: genDetalle, setDetalle: setGenDetalle, func: agregarGeneral, opciones: OPCIONES_GENERAL }
       ].map((seccion, index) => (
-        <div key={index} className="border-2 border-gray-300 rounded-xl p-3 bg-white shadow-sm space-y-3 mt-4">
-            <div className="font-extrabold text-gray-900 text-sm uppercase border-b-2 border-gray-200 pb-2">{seccion.titulo}</div>
-            <div className="space-y-3">
-                <select disabled={estaFinalizado} className="w-full border-2 border-gray-400 p-3 rounded-lg font-bold disabled:bg-gray-200" value={seccion.tipo} onChange={(e) => seccion.setTipo(e.target.value)}>
-                    <option value="">-- SELECCIONAR --</option>
-                    {seccion.opciones.map(op => <option key={op.code} value={op.code}>{op.label}</option>)}
-                </select>
-                <div className="flex gap-2">
-                    <input disabled={estaFinalizado} className="border-2 border-gray-400 p-3 rounded-lg flex-1 font-bold disabled:bg-gray-200" placeholder="Detalles (Opcional)..." value={seccion.detalle} onChange={(e) => seccion.setDetalle(e.target.value)} />
-                    <button onClick={(e) => { e.preventDefault(); seccion.func(); }} className="bg-blue-700 text-white px-4 rounded-lg font-extrabold text-sm uppercase disabled:opacity-40 active:scale-95" disabled={!seccion.tipo || estaFinalizado}>Agregar</button>
-                </div>
+        <div key={index} className="card-base space-y-3">
+          <div className="font-black text-slate-900 dark:text-white text-xs uppercase tracking-wider border-b-2 border-slate-100 dark:border-slate-800 pb-2">{seccion.titulo}</div>
+          <div className="space-y-3">
+            <select disabled={estaFinalizado} className="input-field" value={seccion.tipo} onChange={(e) => seccion.setTipo(e.target.value)}>
+              <option value="" className="text-slate-400">-- SELECCIONAR --</option>
+              {seccion.opciones.map(op => <option key={op.code} value={op.code}>{op.label}</option>)}
+            </select>
+            <div className="flex gap-2">
+              <input disabled={estaFinalizado} className="input-field flex-1" placeholder="Detalles opcionales..." value={seccion.detalle} onChange={(e) => seccion.setDetalle(e.target.value)} />
+              <button onClick={(e) => { e.preventDefault(); seccion.func(); }} className="btn-primary !min-h-[44px] !text-xs" disabled={!seccion.tipo || estaFinalizado}>
+                Agregar
+              </button>
             </div>
+          </div>
         </div>
       ))}
 
-      {/* =========================== */}
       {/* LISTA DE ANOMALÍAS CARGADAS */}
-      {/* =========================== */}
       {(anomaliasLocales.length > 0) && (
-        <div className="border-2 border-red-500 rounded-xl p-4 bg-red-50 shadow-md mt-6">
-           <h3 className="text-sm font-extrabold text-red-700 uppercase mb-3 flex items-center gap-2">
-              <span className="text-xl">🚨</span> Anomalías Cargadas
-           </h3>
-           <ul className="divide-y-2 divide-red-200">
-             {anomaliasLocales.map(a => {
-               let desc = a.ItemCatalogo?.descripcion || a.ItemCatalogo?.codigo;
-               let det = a.valor_texto || a.valor_numero || '';
-               
-               if (a.ItemCatalogo?.codigo === 'PODA' && a.PodaDetalle) {
-                   det = `${a.PodaDetalle.urgencia}/${a.PodaDetalle.medio} (${a.PodaDetalle.cantidad_arboles}) ${det}`;
-               }
-               if (a.AisladorDetalle && a.AisladorDetalle.length > 0) {
-                   const d = a.AisladorDetalle[0];
-                   const tipoTxt = (a.ItemCatalogo?.codigo === 'AISL_ROTO') ? 'ROTO' : 'CACHADO';
-                   desc = `AISL. ${tipoTxt} - FASE ${d.fase}`;
-                   det = `Int: ${d.cantidad_interior} / Ext: ${d.cantidad_exterior} (Lado ${d.lado_referencia})`;
-               }
+        <div className="border-2 border-red-500 rounded-2xl p-4 bg-red-50 dark:bg-red-950/40 shadow-md space-y-3">
+          <h3 className="text-xs font-black text-red-700 dark:text-red-400 uppercase tracking-wider flex items-center gap-1.5">
+            <span>🚨</span> Anomalías Cargadas ({anomaliasLocales.length})
+          </h3>
+          <ul className="divide-y-2 divide-red-200 dark:divide-red-900/60">
+            {anomaliasLocales.map(a => {
+              let desc = a.ItemCatalogo?.descripcion || a.ItemCatalogo?.codigo;
+              let det = a.valor_texto || a.valor_numero || '';
+              
+              if (a.ItemCatalogo?.codigo === 'PODA' && a.PodaDetalle) {
+                det = `${a.PodaDetalle.urgencia}/${a.PodaDetalle.medio} (${a.PodaDetalle.cantidad_arboles}) ${det}`;
+              }
+              if (a.AisladorDetalle && a.AisladorDetalle.length > 0) {
+                const d = a.AisladorDetalle[0];
+                const tipoTxt = (a.ItemCatalogo?.codigo === 'AISL_ROTO') ? 'ROTO' : 'CACHADO';
+                desc = `AISL. ${tipoTxt} - FASE ${d.fase}`;
+                
+                const roturas = [];
+                if (d.cantidad_interior > 0) roturas.push(`Int: ${d.cantidad_interior}`);
+                if (d.cantidad_exterior > 0) roturas.push(`Ext: ${d.cantidad_exterior}`);
+                if (d.cantidad_scm > 0) roturas.push(`SCM: ${d.cantidad_scm}`);
+                
+                const ladoInfo = d.lado_referencia && d.lado_referencia !== 'N/A' ? ` (Lado ${d.lado_referencia})` : '';
+                det = `${roturas.join(' / ')}${ladoInfo}`;
+              }
 
-               return (
-               <li key={a.id} className="py-3 flex justify-between items-center gap-4 animate-fade-in">
-                  <div className="text-sm flex-1">
-                    <span className="font-extrabold text-gray-900 block leading-tight">{desc}</span>
-                    <span className="text-red-800 font-bold text-xs mt-1 block bg-white border border-red-200 p-1.5 rounded inline-block">{det}</span>
+              return (
+                <li key={a.id} className="py-3 flex justify-between items-center gap-3 animate-fade-in">
+                  <div className="text-xs flex-1">
+                    <span className="font-black text-slate-900 dark:text-slate-100 block leading-tight">{desc}</span>
+                    <span className="text-red-800 dark:text-red-300 font-extrabold text-[11px] mt-1 block bg-white dark:bg-slate-900 border border-red-200 dark:border-red-800 p-1.5 rounded-lg inline-block">{det}</span>
                   </div>
-                  {/* SOLO MOSTRAMOS EL BOTÓN BORRAR SI NO ESTÁ FINALIZADO */}
                   {!estaFinalizado && (
-                      <button onClick={(e) => { e.preventDefault(); borrarAnomalia(a.id); }} className="bg-red-600 text-white font-extrabold px-3 py-2 rounded-lg shadow-sm border-2 border-red-800 active:scale-95 text-xs uppercase tracking-wider">
-                        Borrar
-                      </button>
+                    <button onClick={(e) => { e.preventDefault(); borrarAnomalia(a.id); }} className="btn-danger !min-h-[36px] !text-xs !py-1 !px-3">
+                      Borrar
+                    </button>
                   )}
-               </li>
-               );
-             })}
-           </ul>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 
-      {/* BOTÓN MAGISTRAL DE AVANCE (Navega o Guarda dependiendo el modo) */}
+      {/* BOTÓN FLOTANTE DE AVANCE */}
       {(anomaliasLocales.length > 0 || estaFinalizado) && (
-        <div className="fixed bottom-4 left-0 right-0 px-4 z-10 pointer-events-none">
-          <div className="max-w-md mx-auto pointer-events-auto">
+        <div className="fixed bottom-4 left-0 right-0 px-4 z-20 pointer-events-none">
+          <div className="max-w-md md:max-w-2xl mx-auto pointer-events-auto">
             <button 
-               onClick={(e) => { 
-                   e.preventDefault(); 
-                   // Si está finalizado, solo navega, NO guarda
-                   if (estaFinalizado) irAlSiguienteFlujo();
-                   else guardarTodoYContinuar(); 
-               }} 
-               disabled={guardando}
-               className={`w-full py-4 rounded-xl font-extrabold text-lg uppercase tracking-widest shadow-[0_8px_30px_rgb(0,0,0,0.5)] border-2 transition-all flex justify-center items-center gap-2 disabled:opacity-75 ${estaFinalizado ? 'bg-gray-800 border-gray-900 text-white hover:bg-gray-900' : 'bg-blue-800 border-blue-900 text-white hover:bg-blue-900 active:scale-95'}`}
+              onClick={(e) => { 
+                e.preventDefault(); 
+                if (estaFinalizado) irAlSiguienteFlujo();
+                else guardarTodoYContinuar(); 
+              }} 
+              disabled={guardando}
+              className="btn-primary w-full !min-h-[54px] !text-base shadow-2xl"
             >
-               {guardando ? "⏳ PROCESANDO..." : (estaFinalizado ? "Siguiente Piquete →" : "Siguiente Piquete →")}
+              {guardando ? "⏳ PROCESANDO..." : "Siguiente Piquete →"}
             </button>
           </div>
         </div>
       )}
+
     </div>
   );
 }
